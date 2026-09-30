@@ -2,7 +2,8 @@ import streamlit as st
 import ran
 import chim
 import duaxe
-
+import thugian
+import apple
 
 st.set_page_config(
     page_title="Trang chủ",
@@ -13,7 +14,7 @@ st.write("game miễn phí đầy đủ mọi thứ ")
 
 
 menu = st.sidebar.selectbox(
-    "Chọn chức năng",
+    "Bạn cần gì cung có trừ người yêu:",
     [
         "🎮 Giải trí",
         "🎵 Thư giãn",
@@ -22,17 +23,21 @@ menu = st.sidebar.selectbox(
 )
 if menu == "🎮 Giải trí":
     chon = st.selectbox("Chọn trò chơi",
-                        ["Rắn săn mồi",
-                         "Đua xe",
-                         "Con chim bay"]
+                        ["🐍Rắn săn mồi",
+                         "🚗Đua xe",
+                         "🦅Con chim bay",
+                         "🍎 Hứng Táo"]
     )
-    if chon =="Rắn săn mồi":
+    if chon =="🐍Rắn săn mồi":
         ran.main()
-    elif chon =="Đua xe":
+    elif chon =="🚗Đua xe":
         duaxe.main()
-    elif chon =="Con chim bay":
+    elif chon =="🦅Con chim bay":
         chim.main()
-
+    elif chon =="🍎 Hứng Táo":
+        apple.main()
+elif menu =="🎵 Thư giãn":
+    thugian.main()
 
 st.markdown("---")
 st.caption("🚨 Bản quyền: Huy Phúc")
