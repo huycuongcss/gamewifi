@@ -4,10 +4,11 @@ import chim
 import duaxe
 import thugian
 import apple
+import pvz
 
 st.set_page_config(
     page_title="Trang chủ",
-    page_icon="🏠"
+    page_icon="🐖"
 )
 st.title("GAMEWIFI")
 st.write("game miễn phí đầy đủ mọi thứ ")
@@ -26,7 +27,8 @@ if menu == "🎮 Giải trí":
                         ["🐍Rắn săn mồi",
                          "🚗Đua xe",
                          "🦅Con chim bay",
-                         "🍎 Hứng Táo"]
+                         "🍎 Hứng Táo",
+                         "🧟Plants vs Zombies"]
     )
     if chon =="🐍Rắn săn mồi":
         ran.main()
@@ -36,6 +38,8 @@ if menu == "🎮 Giải trí":
         chim.main()
     elif chon =="🍎 Hứng Táo":
         apple.main()
+    elif chon =="🧟Plants vs Zombies":
+        pvz.main()
 elif menu =="🎵 Thư giãn":
     thugian.main()
 
