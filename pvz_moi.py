@@ -7,7 +7,7 @@ def main():
 
     st.set_page_config(
         page_title="PVZ",
-        page_icon="🌻",
+        page_icon="👤",
         layout="wide"
     )
 
