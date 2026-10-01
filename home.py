@@ -39,7 +39,7 @@ if menu == "🎮 Giải trí":
     elif chon =="🍎 Hứng Táo":
         apple.main()
     elif chon =="🧟Plants vs Zombies":
-        pvz.main()
+        pvz_moi.main()
 elif menu =="🎵 Thư giãn":
     thugian.main()
 
