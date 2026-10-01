@@ -4,7 +4,7 @@ import chim
 import duaxe
 import thugian
 import apple
-import pvz
+import pvz_moi
 
 st.set_page_config(
     page_title="Trang chủ",
