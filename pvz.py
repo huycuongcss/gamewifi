@@ -5,8 +5,7 @@ import streamlit.components.v1 as components
 
 def main():
     st.set_page_config(
-        page_title="Cuộc chiến với zombie",
-        page_icon="🌱",
+        page_title="Vườn chiến đấu",
         layout="wide"
     )
 
@@ -20,21 +19,15 @@ def main():
 html, body {
     margin: 0;
     padding: 0;
-    background: #182c18;
+    background: #111;
     overflow: hidden;
-}
-
-#game {
-    width: 100%;
-    display: flex;
-    justify-content: center;
+    touch-action: none;
 }
 
 canvas {
     display: block;
-    width: min(100vw, 1400px);
-    height: auto;
-    background: #75bd4a;
+    margin: auto;
+    background: #79bd4b;
     touch-action: none;
 }
 </style>
@@ -42,31 +35,31 @@ canvas {
 
 <body>
 
-<div id="game">
-<canvas id="canvas" width="1400" height="850"></canvas>
-</div>
+<canvas id="game" width="1400" height="900"></canvas>
 
 <script>
 
-const canvas = document.getElementById("canvas");
+const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 const W = 1400;
-const H = 850;
+const H = 900;
 
 const ROWS = 5;
 const COLS = 9;
 
-const TOP = 105;
-
+const TOP = 115;
 const MOWER_W = 130;
 const BOARD_X = 130;
 
 const CW = 135;
-const CH = 140;
+const CH = 145;
 
 let sun = 200;
-let selectedPlant = null;
+let selected = "sunflower";
+
+let gameOver = false;
+let frame = 0;
 
 let plants = [];
 let zombies = [];
@@ -74,87 +67,752 @@ let bullets = [];
 let suns = [];
 let mowers = [];
 
-let zombieTimer = 0;
-let naturalSunTimer = 0;
 
-let gameOver = false;
+// =============================
+// CÁC LOẠI CÂY
+// =============================
 
-let lastTime = performance.now();
+const plantInfo = {
+
+    sunflower: {
+        name: "Hướng dương",
+        cost: 50
+    },
+
+    pea: {
+        name: "Đậu",
+        cost: 50
+    },
+
+    wallnut: {
+        name: "Wall-nut",
+        cost: 50
+    },
+
+    cherry: {
+        name: "Cherry",
+        cost: 100
+    },
+
+    chomper: {
+        name: "Cây ăn thịt",
+        cost: 125
+    }
+};
 
 
-// ==================================================
-// HỖ TRỢ VẼ
-// ==================================================
+// =============================
+// MÁY CẮT CỎ
+// =============================
+
+for (let r = 0; r < ROWS; r++) {
+
+    mowers.push({
+        row: r,
+        x: 35,
+        y: TOP + r * CH + CH / 2,
+        active: false
+    });
+
+}
+
+
+// =============================
+// HÀM VẼ
+// =============================
+
+function rect(x, y, w, h, color) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x, y, w, h);
+}
+
 
 function circle(x, y, r, color) {
+    ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = color;
     ctx.fill();
 }
 
-function rect(x, y, w, h, color, radius = 0) {
-
-    ctx.fillStyle = color;
-
-    if (radius > 0) {
-
-        ctx.beginPath();
-
-        ctx.roundRect(
-            x, y, w, h, radius
-        );
-
-        ctx.fill();
-
-    } else {
-
-        ctx.fillRect(
-            x, y, w, h
-        );
-    }
-}
 
 function line(x1, y1, x2, y2, color, width = 2) {
-
-    ctx.beginPath();
-
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
-
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
     ctx.stroke();
 }
 
 
-// ==================================================
-// MÁY CẮT CỎ
-// ==================================================
+function text(t, x, y, size, color = "#000", align = "center") {
+    ctx.fillStyle = color;
+    ctx.font = "bold " + size + "px Arial";
+    ctx.textAlign = align;
+    ctx.fillText(t, x, y);
+}
 
-function taoMayCatCo() {
 
-    mowers = [];
+// =============================
+// THANH TRÊN
+// =============================
 
-    for (let r = 0; r < ROWS; r++) {
+function drawTop() {
 
-        mowers.push({
-            row: r,
-            x: 35,
-            active: false
-        });
+    rect(0, 0, W, TOP, "#d8d8d8");
+
+    rect(15, 15, 155, 82, "#fff1a8");
+
+    circle(55, 55, 27, "#ffd52e");
+
+    for (let i = 0; i < 8; i++) {
+
+        let a = i * Math.PI / 4;
+
+        line(
+            55 + Math.cos(a) * 33,
+            55 + Math.sin(a) * 33,
+            55 + Math.cos(a) * 43,
+            55 + Math.sin(a) * 43,
+            "#e7a900",
+            3
+        );
+    }
+
+    text(String(sun), 110, 65, 27, "#222", "left");
+
+
+    let cards = [
+        ["sunflower", 190],
+        ["pea", 330],
+        ["wallnut", 470],
+        ["cherry", 610],
+        ["chomper", 750]
+    ];
+
+
+    for (let item of cards) {
+
+        let type = item[0];
+        let x = item[1];
+
+        let info = plantInfo[type];
+
+        let active = selected === type;
+
+        rect(
+            x,
+            10,
+            125,
+            90,
+            active ? "#c7a5e8" : "#eeeeee"
+        );
+
+        ctx.strokeStyle =
+            active ? "#6d239e" : "#777";
+
+        ctx.lineWidth =
+            active ? 4 : 2;
+
+        ctx.strokeRect(
+            x,
+            10,
+            125,
+            90
+        );
+
+        drawPlantSmall(
+            type,
+            x + 32,
+            55
+        );
+
+        text(
+            info.name,
+            x + 70,
+            39,
+            13,
+            "#111"
+        );
+
+        text(
+            info.cost,
+            x + 70,
+            75,
+            17,
+            info.cost <= sun
+                ? "#075f16"
+                : "#a00000"
+        );
+    }
+
+
+    text(
+        "Chọn cây rồi chạm vào ô cỏ để trồng",
+        920,
+        45,
+        18,
+        "#222",
+        "left"
+    );
+
+    text(
+        "Zombie thường - Xô - Big",
+        920,
+        75,
+        17,
+        "#333",
+        "left"
+    );
+}
+
+
+// =============================
+// CÂY NHỎ TRÊN MENU
+// =============================
+
+function drawPlantSmall(type, x, y) {
+
+    if (type === "sunflower") {
+
+        circle(x, y, 15, "#9b5b22");
+
+        for (let i = 0; i < 8; i++) {
+
+            let a = i * Math.PI / 4;
+
+            circle(
+                x + Math.cos(a) * 17,
+                y + Math.sin(a) * 17,
+                8,
+                "#ffd72e"
+            );
+        }
+    }
+
+
+    else if (type === "pea") {
+
+        line(
+            x,
+            y + 22,
+            x,
+            y + 42,
+            "#248a31",
+            5
+        );
+
+        circle(x, y, 19, "#3caf35");
+
+        circle(x - 7, y - 5, 3, "#111");
+        circle(x + 7, y - 5, 3, "#111");
+
+        circle(x + 19, y + 2, 7, "#167025");
+    }
+
+
+    else if (type === "wallnut") {
+
+        ctx.fillStyle = "#a86627";
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            x,
+            y,
+            22,
+            29,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        circle(x - 7, y - 5, 3, "#111");
+        circle(x + 7, y - 5, 3, "#111");
+    }
+
+
+    else if (type === "cherry") {
+
+        circle(x - 10, y + 3, 13, "#d92828");
+        circle(x + 10, y + 3, 13, "#d92828");
+
+        line(
+            x,
+            y - 7,
+            x + 8,
+            y - 25,
+            "#276c25",
+            4
+        );
+    }
+
+
+    // CÂY ĂN THỊT TÍM
+    else if (type === "chomper") {
+
+        line(
+            x,
+            y + 18,
+            x,
+            y + 42,
+            "#57227a",
+            5
+        );
+
+        circle(
+            x - 14,
+            y + 35,
+            13,
+            "#7334a3"
+        );
+
+        circle(
+            x + 14,
+            y + 35,
+            13,
+            "#7334a3"
+        );
+
+        circle(
+            x,
+            y,
+            22,
+            "#7b3fb0"
+        );
+
+        ctx.fillStyle = "#c78bea";
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x - 17,
+            y + 4
+        );
+
+        ctx.quadraticCurveTo(
+            x,
+            y + 27,
+            x + 17,
+            y + 4
+        );
+
+        ctx.fill();
+
+        circle(
+            x - 7,
+            y - 6,
+            3,
+            "#111"
+        );
+
+        circle(
+            x + 7,
+            y - 6,
+            3,
+            "#111"
+        );
     }
 }
 
-taoMayCatCo();
+
+// =============================
+// VẼ CÂY
+// =============================
+
+function drawPlant(p) {
+
+    let x =
+        BOARD_X +
+        p.col * CW +
+        CW / 2;
+
+    let y =
+        TOP +
+        p.row * CH +
+        CH / 2;
 
 
-// ==================================================
+    if (p.type === "sunflower") {
+
+        line(
+            x,
+            y + 25,
+            x,
+            y + 58,
+            "#257c29",
+            7
+        );
+
+        circle(
+            x - 15,
+            y + 40,
+            13,
+            "#3c9e36"
+        );
+
+        circle(
+            x + 15,
+            y + 40,
+            13,
+            "#3c9e36"
+        );
+
+        for (let i = 0; i < 10; i++) {
+
+            let a =
+                i * Math.PI * 2 / 10;
+
+            circle(
+                x + Math.cos(a) * 31,
+                y + Math.sin(a) * 31,
+                14,
+                "#ffd735"
+            );
+        }
+
+        circle(
+            x,
+            y,
+            25,
+            "#8b5224"
+        );
+
+        circle(
+            x - 9,
+            y - 5,
+            4,
+            "#111"
+        );
+
+        circle(
+            x + 9,
+            y - 5,
+            4,
+            "#111"
+        );
+    }
+
+
+    else if (p.type === "pea") {
+
+        line(
+            x,
+            y + 28,
+            x,
+            y + 60,
+            "#277c2d",
+            8
+        );
+
+        circle(
+            x - 17,
+            y + 43,
+            16,
+            "#319d36"
+        );
+
+        circle(
+            x + 17,
+            y + 43,
+            16,
+            "#319d36"
+        );
+
+        circle(
+            x,
+            y,
+            31,
+            "#42ad3c"
+        );
+
+        circle(
+            x - 10,
+            y - 8,
+            5,
+            "#111"
+        );
+
+        circle(
+            x + 10,
+            y - 8,
+            5,
+            "#111"
+        );
+
+        circle(
+            x + 29,
+            y + 2,
+            12,
+            "#207c2a"
+        );
+    }
+
+
+    else if (p.type === "wallnut") {
+
+        ctx.fillStyle = "#a96828";
+
+        ctx.beginPath();
+
+        ctx.ellipse(
+            x,
+            y,
+            40,
+            50,
+            0,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+        ctx.strokeStyle = "#714117";
+        ctx.lineWidth = 3;
+
+        for (let i = -2; i <= 2; i++) {
+
+            line(
+                x + i * 10,
+                y - 30,
+                x + i * 13,
+                y + 35,
+                "#714117",
+                2
+            );
+        }
+
+        circle(
+            x - 13,
+            y - 8,
+            6,
+            "#111"
+        );
+
+        circle(
+            x + 13,
+            y - 8,
+            6,
+            "#111"
+        );
+    }
+
+
+    else if (p.type === "cherry") {
+
+        circle(
+            x - 23,
+            y + 5,
+            28,
+            "#d92828"
+        );
+
+        circle(
+            x + 23,
+            y + 5,
+            28,
+            "#d92828"
+        );
+
+        line(
+            x,
+            y - 15,
+            x + 17,
+            y - 48,
+            "#286c25",
+            7
+        );
+
+        circle(
+            x + 23,
+            y - 42,
+            13,
+            "#3d9c38"
+        );
+    }
+
+
+    // ==================================
+    // CÂY ĂN THỊT MÀU TÍM
+    // ==================================
+
+    else if (p.type === "chomper") {
+
+        // thân tím đậm
+        line(
+            x,
+            y + 28,
+            x,
+            y + 62,
+            "#54206f",
+            9
+        );
+
+        // lá tím
+        circle(
+            x - 20,
+            y + 45,
+            17,
+            "#71359b"
+        );
+
+        circle(
+            x + 20,
+            y + 45,
+            17,
+            "#71359b"
+        );
+
+        // đầu tím
+        circle(
+            x,
+            y,
+            43,
+            "#803bb5"
+        );
+
+        // phần miệng tím sáng
+        ctx.fillStyle = "#d29af0";
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x - 34,
+            y + 2
+        );
+
+        ctx.quadraticCurveTo(
+            x,
+            y + 43,
+            x + 34,
+            y + 2
+        );
+
+        ctx.quadraticCurveTo(
+            x,
+            y + 17,
+            x - 34,
+            y + 2
+        );
+
+        ctx.fill();
+
+
+        // viền miệng
+        ctx.strokeStyle = "#4c1768";
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x - 34,
+            y + 2
+        );
+
+        ctx.quadraticCurveTo(
+            x,
+            y + 43,
+            x + 34,
+            y + 2
+        );
+
+        ctx.stroke();
+
+
+        // răng
+        for (let i = -2; i <= 2; i++) {
+
+            ctx.fillStyle = "#ffffff";
+
+            ctx.beginPath();
+
+            ctx.moveTo(
+                x + i * 12 - 5,
+                y + 7
+            );
+
+            ctx.lineTo(
+                x + i * 12,
+                y + 20
+            );
+
+            ctx.lineTo(
+                x + i * 12 + 5,
+                y + 7
+            );
+
+            ctx.fill();
+        }
+
+
+        // mắt
+        circle(
+            x - 13,
+            y - 18,
+            5,
+            "#111"
+        );
+
+        circle(
+            x + 13,
+            y - 18,
+            5,
+            "#111"
+        );
+
+
+        // má
+        circle(
+            x - 31,
+            y - 2,
+            6,
+            "#b96bdd"
+        );
+
+        circle(
+            x + 31,
+            y - 2,
+            6,
+            "#b96bdd"
+        );
+    }
+
+
+    // thanh máu
+    if (p.type !== "sunflower") {
+
+        let hpWidth = 75;
+
+        rect(
+            x - hpWidth / 2,
+            y + 67,
+            hpWidth,
+            7,
+            "#7a0000"
+        );
+
+        rect(
+            x - hpWidth / 2,
+            y + 67,
+            hpWidth *
+            Math.max(
+                0,
+                p.hp / p.maxHp
+            ),
+            7,
+            "#26a52f"
+        );
+    }
+}
+
+
+// =============================
 // TRỒNG CÂY
-// ==================================================
+// =============================
 
-function trongCay(row, col, type) {
+function plantAt(row, col) {
 
     if (
         row < 0 ||
@@ -165,1241 +823,290 @@ function trongCay(row, col, type) {
         return;
     }
 
-    if (
-        plants.some(
-            p =>
+    let exists = plants.find(
+        p =>
             p.row === row &&
             p.col === col
-        )
-    ) {
-        return;
+    );
+
+    if (exists) return;
+
+    let info =
+        plantInfo[selected];
+
+    if (sun < info.cost) return;
+
+    sun -= info.cost;
+
+    let hp = 120;
+
+    if (selected === "wallnut") {
+        hp = 350;
     }
 
-    let cost = 0;
-
-    if (type === "sunflower") cost = 50;
-    if (type === "pea") cost = 50;
-    if (type === "wallnut") cost = 50;
-    if (type === "cherry") cost = 100;
-
-    if (sun < cost) return;
-
-    sun -= cost;
+    if (selected === "chomper") {
+        hp = 180;
+    }
 
     plants.push({
+
+        type: selected,
+
         row: row,
         col: col,
-        type: type,
-        hp:
-            type === "wallnut"
-            ? 350
-            : 120,
-        timer: 0
+
+        hp: hp,
+        maxHp: hp,
+
+        timer: 0,
+
+        eating: false,
+        eatTimer: 0
     });
 }
 
 
-// ==================================================
-// MẶT TRỜI
-// ==================================================
-
-function taoMatTroi(x, y) {
-
-    suns.push({
-        x: x,
-        y: y,
-        life: 1000,
-        r: 30
-    });
-}
-
-function taoMatTroiTuNhien() {
-
-    let col =
-        Math.floor(
-            Math.random() * COLS
-        );
-
-    let row =
-        Math.floor(
-            Math.random() * ROWS
-        );
-
-    let x =
-        BOARD_X +
-        col * CW +
-        CW / 2;
-
-    let y =
-        TOP +
-        row * CH +
-        40;
-
-    taoMatTroi(x, y);
-}
-
-
-// ==================================================
-// ZOMBIE
-// ==================================================
-
-function taoZombie() {
-
-    let row =
-        Math.floor(
-            Math.random() * ROWS
-        );
-
-    zombies.push({
-
-        row: row,
-
-        x: W + 60,
-
-        hp: 160,
-
-        maxHP: 160,
-
-        speed:
-            0.20 +
-            Math.random() * 0.12,
-
-        attackTimer: 0,
-
-        walk: 0
-    });
-}
-
-
-// ==================================================
-// NỀN
-// ==================================================
-
-function veNen() {
-
-    // Bầu trời
-    rect(
-        0,
-        0,
-        W,
-        TOP,
-        "#263d24"
-    );
-
-    // Cỏ toàn màn hình
-    rect(
-        0,
-        TOP,
-        W,
-        H - TOP,
-        "#5eae3d"
-    );
-
-    // Khu máy cắt cỏ
-    rect(
-        0,
-        TOP,
-        MOWER_W,
-        ROWS * CH,
-        "#477e31"
-    );
-
-    // Đường viền khu máy
-    line(
-        MOWER_W,
-        TOP,
-        MOWER_W,
-        TOP + ROWS * CH,
-        "#294c20",
-        5
-    );
-
-    // Bàn cỏ 5 × 9
-    for (let row = 0; row < ROWS; row++) {
-
-        for (let col = 0; col < COLS; col++) {
-
-            let x =
-                BOARD_X +
-                col * CW;
-
-            let y =
-                TOP +
-                row * CH;
-
-            let color =
-                (row + col) % 2 === 0
-                ? "#73c84b"
-                : "#68bc43";
-
-            rect(
-                x,
-                y,
-                CW,
-                CH,
-                color
-            );
-
-            // Các vệt cỏ
-            for (let k = 0; k < 7; k++) {
-
-                let gx =
-                    x +
-                    12 +
-                    ((k * 29 + row * 17) % 105);
-
-                let gy =
-                    y +
-                    20 +
-                    ((k * 31 + col * 13) % 105);
-
-                line(
-                    gx,
-                    gy,
-                    gx + 3,
-                    gy - 7,
-                    "rgba(35,110,35,0.25)",
-                    2
-                );
-            }
-
-            // Viền ô
-            ctx.strokeStyle =
-                "rgba(35,90,25,0.25)";
-
-            ctx.lineWidth = 2;
-
-            ctx.strokeRect(
-                x,
-                y,
-                CW,
-                CH
-            );
-        }
-    }
-
-    // Hàng đất cuối
-    rect(
-        BOARD_X,
-        TOP + ROWS * CH,
-        COLS * CW,
-        45,
-        "#6b472b"
-    );
-
-    // đá nhỏ
-    for (let i = 0; i < 18; i++) {
-
-        let x =
-            BOARD_X +
-            ((i * 97) % 1180);
-
-        let y =
-            TOP +
-            ROWS * CH +
-            10 +
-            ((i * 13) % 22);
-
-        circle(
-            x,
-            y,
-            3,
-            "#987052"
-        );
-    }
-}
-
-
-// ==================================================
-// THANH ĐIỀU KHIỂN
-// ==================================================
-
-function veThanhDieuKhien() {
-
-    rect(
-        15,
-        15,
-        190,
-        70,
-        "#172617",
-        14
-    );
-
-    circle(
-        55,
-        50,
-        24,
-        "#ffd735"
-    );
-
-    // tia mặt trời
-    for (let i = 0; i < 8; i++) {
-
-        let a =
-            i * Math.PI / 4;
-
-        line(
-            55 + Math.cos(a) * 30,
-            50 + Math.sin(a) * 30,
-            55 + Math.cos(a) * 38,
-            50 + Math.sin(a) * 38,
-            "#ffd735",
-            5
-        );
-    }
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 27px Arial";
-    ctx.textAlign = "left";
-
-    ctx.fillText(
-        sun,
-        90,
-        59
-    );
-
-
-    let buttons = [
-
-        {
-            x: 225,
-            type: "sunflower",
-            name: "MẶT TRỜI",
-            cost: 50
-        },
-
-        {
-            x: 395,
-            type: "pea",
-            name: "ĐẬU",
-            cost: 50
-        },
-
-        {
-            x: 565,
-            type: "wallnut",
-            name: "ÓC CHÓ",
-            cost: 50
-        },
-
-        {
-            x: 735,
-            type: "cherry",
-            name: "CHERRY",
-            cost: 100
-        }
-    ];
-
-
-    for (let b of buttons) {
-
-        let active =
-            selectedPlant === b.type;
-
-        rect(
-            b.x,
-            10,
-            155,
-            80,
-            active
-            ? "#f7e47a"
-            : "#d9ead0",
-            12
-        );
-
-        ctx.strokeStyle =
-            active
-            ? "#fff000"
-            : "#355c2b";
-
-        ctx.lineWidth = 4;
-
-        ctx.strokeRect(
-            b.x,
-            10,
-            155,
-            80
-        );
-
-        veCayNho(
-            b.type,
-            b.x + 42,
-            50,
-            0.55
-        );
-
-        ctx.fillStyle = "#1d351b";
-        ctx.font = "bold 15px Arial";
-        ctx.textAlign = "left";
-
-        ctx.fillText(
-            b.name,
-            b.x + 72,
-            43
-        );
-
-        ctx.font = "bold 18px Arial";
-
-        ctx.fillText(
-            b.cost,
-            b.x + 72,
-            68
-        );
-    }
-}
-
-
-// ==================================================
-// VẼ MẶT TRỜI
-// ==================================================
-
-function veSun(s) {
-
-    // tia
-    for (let i = 0; i < 12; i++) {
-
-        let a =
-            i * Math.PI / 6;
-
-        line(
-            s.x + Math.cos(a) * 34,
-            s.y + Math.sin(a) * 34,
-            s.x + Math.cos(a) * 44,
-            s.y + Math.sin(a) * 44,
-            "#ffc400",
-            5
-        );
-    }
-
-    circle(
-        s.x,
-        s.y,
-        s.r,
-        "#ffd83d"
-    );
-
-    circle(
-        s.x - 8,
-        s.y - 7,
-        4,
-        "#9b6b00"
-    );
-
-    circle(
-        s.x + 8,
-        s.y - 7,
-        4,
-        "#9b6b00"
-    );
-
-    ctx.beginPath();
-
-    ctx.arc(
-        s.x,
-        s.y + 2,
-        10,
-        0,
-        Math.PI
-    );
-
-    ctx.strokeStyle = "#9b6b00";
-    ctx.lineWidth = 3;
-
-    ctx.stroke();
-}
-
-
-// ==================================================
-// VẼ CÂY MẶT TRỜI
-// ==================================================
-
-function veSunflower(x, y, scale) {
-
-    // thân
-    line(
-        x,
-        y + 25 * scale,
-        x,
-        y + 72 * scale,
-        "#27752c",
-        9 * scale
-    );
-
-    // lá
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x - 22 * scale,
-        y + 48 * scale,
-        25 * scale,
-        11 * scale,
-        -0.4,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#3eaa3d";
-    ctx.fill();
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x + 22 * scale,
-        y + 55 * scale,
-        25 * scale,
-        11 * scale,
-        0.4,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fill();
-
-    // cánh hoa
-    for (let i = 0; i < 12; i++) {
-
-        let a =
-            i * Math.PI / 6;
-
-        circle(
-            x + Math.cos(a) * 30 * scale,
-            y + Math.sin(a) * 30 * scale,
-            14 * scale,
-            "#f7c928"
-        );
-    }
-
-    circle(
-        x,
-        y,
-        24 * scale,
-        "#6b451c"
-    );
-
-    circle(
-        x - 8 * scale,
-        y - 5 * scale,
-        3 * scale,
-        "#222"
-    );
-
-    circle(
-        x + 8 * scale,
-        y - 5 * scale,
-        3 * scale,
-        "#222"
-    );
-}
-
-
-// ==================================================
-// VẼ CÂY ĐẬU
-// ==================================================
-
-function vePea(x, y, scale) {
-
-    // thân
-    line(
-        x,
-        y + 30 * scale,
-        x,
-        y + 78 * scale,
-        "#27752c",
-        10 * scale
-    );
-
-    // lá
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x - 22 * scale,
-        y + 50 * scale,
-        26 * scale,
-        13 * scale,
-        -0.5,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#3fa83b";
-    ctx.fill();
-
-    // đầu cây
-    circle(
-        x,
-        y,
-        31 * scale,
-        "#4bb844"
-    );
-
-    // miệng súng
-    circle(
-        x + 24 * scale,
-        y - 3 * scale,
-        17 * scale,
-        "#369635"
-    );
-
-    circle(
-        x + 30 * scale,
-        y - 3 * scale,
-        9 * scale,
-        "#245f29"
-    );
-
-    // mắt
-    circle(
-        x - 10 * scale,
-        y - 8 * scale,
-        6 * scale,
-        "#fff"
-    );
-
-    circle(
-        x - 8 * scale,
-        y - 8 * scale,
-        3 * scale,
-        "#222"
-    );
-}
-
-
-// ==================================================
-// VẼ ÓC CHÓ
-// ==================================================
-
-function veWallnut(x, y, scale) {
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x,
-        y + 20 * scale,
-        43 * scale,
-        55 * scale,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#9a6234";
-    ctx.fill();
-
-    ctx.strokeStyle = "#5f351c";
-    ctx.lineWidth = 5 * scale;
-    ctx.stroke();
-
-    // mặt
-    circle(
-        x - 14 * scale,
-        y + 5 * scale,
-        5 * scale,
-        "#21160d"
-    );
-
-    circle(
-        x + 14 * scale,
-        y + 5 * scale,
-        5 * scale,
-        "#21160d"
-    );
-
-    ctx.beginPath();
-
-    ctx.arc(
-        x,
-        y + 27 * scale,
-        17 * scale,
-        0,
-        Math.PI
-    );
-
-    ctx.strokeStyle = "#432516";
-    ctx.lineWidth = 4 * scale;
-
-    ctx.stroke();
-
-    // vân trên óc chó
-    line(
-        x - 25 * scale,
-        y - 15 * scale,
-        x - 10 * scale,
-        y - 35 * scale,
-        "#754521",
-        4 * scale
-    );
-
-    line(
-        x + 25 * scale,
-        y - 15 * scale,
-        x + 10 * scale,
-        y - 35 * scale,
-        "#754521",
-        4 * scale
-    );
-}
-
-
-// ==================================================
-// VẼ CHERRY
-// ==================================================
-
-function veCherry(x, y, scale) {
-
-    // thân
-    line(
-        x,
-        y - 25 * scale,
-        x + 10 * scale,
-        y - 55 * scale,
-        "#385d25",
-        6 * scale
-    );
-
-    // lá
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x + 22 * scale,
-        y - 52 * scale,
-        18 * scale,
-        9 * scale,
-        -0.4,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#3e9e36";
-    ctx.fill();
-
-    circle(
-        x - 22 * scale,
-        y + 15 * scale,
-        27 * scale,
-        "#d72e35"
-    );
-
-    circle(
-        x + 22 * scale,
-        y + 15 * scale,
-        27 * scale,
-        "#e33b3f"
-    );
-
-    circle(
-        x - 30 * scale,
-        y + 6 * scale,
-        6 * scale,
-        "#ff7777"
-    );
-
-    circle(
-        x + 14 * scale,
-        y + 6 * scale,
-        6 * scale,
-        "#ff7777"
-    );
-
-    // mắt
-    circle(
-        x - 29 * scale,
-        y + 13 * scale,
-        4 * scale,
-        "#222"
-    );
-
-    circle(
-        x + 15 * scale,
-        y + 13 * scale,
-        4 * scale,
-        "#222"
-    );
-}
-
-
-// ==================================================
-// VẼ CÂY
-// ==================================================
-
-function veCayNho(type, x, y, scale) {
-
-    if (type === "sunflower") {
-        veSunflower(x, y, scale);
-    }
-
-    if (type === "pea") {
-        vePea(x, y, scale);
-    }
-
-    if (type === "wallnut") {
-        veWallnut(x, y, scale);
-    }
-
-    if (type === "cherry") {
-        veCherry(x, y, scale);
-    }
-}
-
-function veCay(p) {
+// =============================
+// BẮN ĐẠN
+// =============================
+
+function shoot(p) {
 
     let x =
         BOARD_X +
         p.col * CW +
-        CW / 2;
+        CW / 2 +
+        35;
 
     let y =
         TOP +
         p.row * CH +
-        62;
-
-    veCayNho(
-        p.type,
-        x,
-        y,
-        1.0
-    );
-
-    // thanh máu
-    let hpWidth = 75;
-
-    rect(
-        x - hpWidth / 2,
-        y + 65,
-        hpWidth,
-        7,
-        "#263326",
-        4
-    );
-
-    rect(
-        x - hpWidth / 2,
-        y + 65,
-        hpWidth * Math.max(
-            0,
-            p.hp /
-            (p.type === "wallnut"
-                ? 350
-                : 120)
-        ),
-        7,
-        "#38db45",
-        4
-    );
-}
-
-
-// ==================================================
-// VẼ ZOMBIE
-// ==================================================
-
-function veZombie(z) {
-
-    let x = z.x;
-    let y = TOP + z.row * CH + 65;
-
-    z.walk += 0.05;
-
-    let legMove =
-        Math.sin(z.walk) * 7;
-
-    // bóng
-    ctx.globalAlpha = 0.25;
-
-    ctx.beginPath();
-
-    ctx.ellipse(
-        x,
-        y + 65,
-        38,
-        10,
-        0,
-        0,
-        Math.PI * 2
-    );
-
-    ctx.fillStyle = "#263d24";
-    ctx.fill();
-
-    ctx.globalAlpha = 1;
-
-    // chân
-    line(
-        x - 15,
-        y + 38,
-        x - 18 + legMove,
-        y + 70,
-        "#27392b",
-        12
-    );
-
-    line(
-        x + 15,
-        y + 38,
-        x + 18 - legMove,
-        y + 70,
-        "#27392b",
-        12
-    );
-
-    // thân áo
-    rect(
-        x - 32,
-        y - 5,
-        64,
-        55,
-        "#66746b",
-        12
-    );
-
-    // cà vạt
-    ctx.beginPath();
-
-    ctx.moveTo(x, y + 5);
-    ctx.lineTo(x - 8, y + 28);
-    ctx.lineTo(x, y + 43);
-    ctx.lineTo(x + 8, y + 28);
-    ctx.closePath();
-
-    ctx.fillStyle = "#8c2525";
-    ctx.fill();
-
-    // cổ
-    rect(
-        x - 13,
-        y - 14,
-        26,
-        20,
-        "#6f8970",
-        7
-    );
-
-    // đầu
-    circle(
-        x,
-        y - 42,
-        36,
-        "#7da76b"
-    );
-
-    // tai
-    circle(
-        x - 35,
-        y - 42,
-        10,
-        "#719361"
-    );
-
-    circle(
-        x + 35,
-        y - 42,
-        10,
-        "#719361"
-    );
-
-    // tóc
-    for (let i = -2; i <= 2; i++) {
-
-        circle(
-            x + i * 14,
-            y - 73,
-            10,
-            "#38463b"
-        );
-    }
-
-    // mắt
-    circle(
-        x - 13,
-        y - 48,
-        8,
-        "#fff"
-    );
-
-    circle(
-        x + 13,
-        y - 48,
-        8,
-        "#fff"
-    );
-
-    circle(
-        x - 11,
-        y - 47,
-        4,
-        "#222"
-    );
-
-    circle(
-        x + 15,
-        y - 47,
-        4,
-        "#222"
-    );
-
-    // miệng
-    ctx.beginPath();
-
-    ctx.arc(
-        x,
-        y - 28,
-        15,
-        0,
-        Math.PI
-    );
-
-    ctx.strokeStyle = "#384b38";
-    ctx.lineWidth = 5;
-
-    ctx.stroke();
-
-    // thanh máu
-    rect(
-        x - 40,
-        y - 95,
-        80,
-        8,
-        "#222",
-        4
-    );
-
-    rect(
-        x - 40,
-        y - 95,
-        80 * Math.max(
-            0,
-            z.hp / z.maxHP
-        ),
-        8,
-        "#e23a3a",
-        4
-    );
-}
-
-
-// ==================================================
-// VẼ MÁY CẮT CỎ
-// ==================================================
-
-function veMayCat(m) {
-
-    let y =
-        TOP +
-        m.row * CH +
-        65;
-
-    // bánh
-    circle(
-        m.x + 18,
-        y + 30,
-        15,
-        "#222"
-    );
-
-    circle(
-        m.x + 68,
-        y + 30,
-        15,
-        "#222"
-    );
-
-    // thân máy
-    rect(
-        m.x,
-        y - 15,
-        80,
-        45,
-        "#d84a32",
-        10
-    );
-
-    // tay cầm
-    line(
-        m.x + 65,
-        y - 10,
-        m.x + 92,
-        y - 35,
-        "#333",
-        7
-    );
-
-    line(
-        m.x + 92,
-        y - 35,
-        m.x + 105,
-        y - 35,
-        "#333",
-        7
-    );
-
-    // đèn
-    circle(
-        m.x + 15,
-        y - 3,
-        6,
-        "#ffe06b"
-    );
-}
-
-
-// ==================================================
-// ĐẠN
-// ==================================================
-
-function veDan(b) {
-
-    circle(
-        b.x,
-        b.y,
-        9,
-        "#8be33e"
-    );
-
-    circle(
-        b.x - 3,
-        b.y - 3,
-        3,
-        "#d5ff92"
-    );
-}
-
-
-// ==================================================
-// BẮN
-// ==================================================
-
-function banDan(p) {
-
-    let x =
-        BOARD_X +
-        p.col * CW +
-        80;
-
-    let y =
-        TOP +
-        p.row * CH +
-        60;
+        CH / 2;
 
     bullets.push({
+
         x: x,
         y: y,
+
         row: p.row,
-        speed: 8,
-        damage: 30
+
+        speed: 10,
+
+        damage: 25
     });
 }
 
 
-// ==================================================
-// CHERRY NỔ
-// ==================================================
-
-function cherryNo(p) {
-
-    let px =
-        BOARD_X +
-        p.col * CW +
-        CW / 2;
-
-    let py =
-        TOP +
-        p.row * CH +
-        65;
-
-    for (let z of zombies) {
-
-        let zy =
-            TOP +
-            z.row * CH +
-            65;
-
-        let dx = z.x - px;
-        let dy = zy - py;
-
-        let d =
-            Math.sqrt(
-                dx * dx +
-                dy * dy
-            );
-
-        if (d < 180) {
-            z.hp -= 300;
-        }
-    }
-
-    p.hp = 0;
-}
-
-
-// ==================================================
+// =============================
 // CẬP NHẬT CÂY
-// ==================================================
+// =============================
 
 function updatePlants() {
 
-    for (let p of plants) {
+    for (
+        let i = plants.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        let p = plants[i];
 
         p.timer++;
 
+
+        // HƯỚNG DƯƠNG
         if (
-            p.type === "sunflower" &&
-            p.timer >= 480
+            p.type === "sunflower"
         ) {
 
-            let x =
+            if (p.timer >= 480) {
+
+                p.timer = 0;
+
+                suns.push({
+
+                    x:
+                        BOARD_X +
+                        p.col * CW +
+                        CW / 2,
+
+                    y:
+                        TOP +
+                        p.row * CH +
+                        35,
+
+                    value: 25,
+
+                    life: 600
+                });
+            }
+        }
+
+
+        // ĐẬU
+        else if (
+            p.type === "pea"
+        ) {
+
+            let target =
+                zombies.find(
+                    z =>
+                        z.row === p.row &&
+                        z.x >
+                        BOARD_X +
+                        p.col * CW
+                );
+
+            if (
+                target &&
+                p.timer >= 85
+            ) {
+
+                shoot(p);
+
+                p.timer = 0;
+            }
+        }
+
+
+        // CHERRY
+        else if (
+            p.type === "cherry"
+        ) {
+
+            if (p.timer >= 45) {
+
+                let x =
+                    BOARD_X +
+                    p.col * CW +
+                    CW / 2;
+
+                let y =
+                    TOP +
+                    p.row * CH +
+                    CH / 2;
+
+                for (
+                    let z of zombies
+                ) {
+
+                    let zy =
+                        TOP +
+                        z.row * CH +
+                        CH / 2;
+
+                    let d =
+                        Math.hypot(
+                            z.x - x,
+                            zy - y
+                        );
+
+                    if (d < 190) {
+
+                        z.hp -= 180;
+                    }
+                }
+
+                plants.splice(i, 1);
+            }
+        }
+
+
+        // CÂY ĂN THỊT
+        else if (
+            p.type === "chomper"
+        ) {
+
+            if (p.eating) {
+
+                p.eatTimer--;
+
+                if (
+                    p.eatTimer <= 0
+                ) {
+
+                    p.eating = false;
+                    p.timer = 0;
+                }
+
+                continue;
+            }
+
+
+            let px =
                 BOARD_X +
                 p.col * CW +
                 CW / 2;
 
-            let y =
-                TOP +
-                p.row * CH +
-                25;
+            let target = null;
 
-            taoMatTroi(
-                x,
-                y
-            );
+            for (
+                let z of zombies
+            ) {
 
-            p.timer = 0;
-        }
+                if (
+                    z.row !== p.row
+                ) {
+                    continue;
+                }
 
+                let distance =
+                    z.x - px;
 
-        if (
-            p.type === "pea" &&
-            p.timer >= 85
-        ) {
+                if (
+                    distance > -20 &&
+                    distance < 100
+                ) {
 
-            let hasZombie =
-                zombies.some(
-                    z =>
-                    z.row === p.row &&
-                    z.x >
-                    BOARD_X +
-                    p.col * CW
-                );
-
-            if (hasZombie) {
-                banDan(p);
+                    target = z;
+                    break;
+                }
             }
 
-            p.timer = 0;
-        }
 
+            if (target) {
 
-        if (
-            p.type === "cherry" &&
-            p.timer >= 45
-        ) {
+                target.hp = 0;
 
-            cherryNo(p);
+                p.eating = true;
+
+                p.eatTimer = 300;
+            }
         }
     }
 }
 
 
-// ==================================================
-// ĐẠN
-// ==================================================
+// =============================
+// VẼ ĐẠN
+// =============================
+
+function drawBullets() {
+
+    for (
+        let b of bullets
+    ) {
+
+        circle(
+            b.x,
+            b.y,
+            9,
+            "#3a9e31"
+        );
+
+        circle(
+            b.x - 3,
+            b.y - 3,
+            3,
+            "#a6df72"
+        );
+    }
+}
+
+
+// =============================
+// CẬP NHẬT ĐẠN
+// =============================
 
 function updateBullets() {
 
@@ -1415,17 +1122,28 @@ function updateBullets() {
 
         let hit = false;
 
-        for (let z of zombies) {
+        for (
+            let z of zombies
+        ) {
+
+            if (
+                z.row !== b.row
+            ) {
+                continue;
+            }
 
             let zy =
                 TOP +
                 z.row * CH +
-                65;
+                CH / 2;
 
             if (
-                z.row === b.row &&
-                Math.abs(z.x - b.x) < 35 &&
-                Math.abs(zy - b.y) < 60
+                Math.abs(
+                    z.x - b.x
+                ) < 35 &&
+                Math.abs(
+                    zy - b.y
+                ) < 45
             ) {
 
                 z.hp -= b.damage;
@@ -1447,9 +1165,307 @@ function updateBullets() {
 }
 
 
-// ==================================================
-// ZOMBIE
-// ==================================================
+// =============================
+// TẠO ZOMBIE
+// =============================
+
+function spawnZombie() {
+
+    let row =
+        Math.floor(
+            Math.random() * ROWS
+        );
+
+    let chance =
+        Math.random();
+
+    let type = "normal";
+
+    if (
+        chance < 0.20
+    ) {
+
+        type = "bucket";
+
+    } else if (
+        chance < 0.34
+    ) {
+
+        type = "big";
+    }
+
+
+    let hp = 120;
+    let speed = 0.45;
+    let scale = 1;
+
+
+    if (
+        type === "bucket"
+    ) {
+
+        hp = 300;
+        speed = 0.38;
+        scale = 1.05;
+    }
+
+
+    if (
+        type === "big"
+    ) {
+
+        hp = 650;
+        speed = 0.25;
+        scale = 1.35;
+    }
+
+
+    zombies.push({
+
+        type: type,
+
+        row: row,
+
+        x: W + 80,
+
+        hp: hp,
+
+        maxHp: hp,
+
+        speed: speed,
+
+        scale: scale,
+
+        attackTimer: 0
+    });
+}
+
+
+// =============================
+// VẼ ZOMBIE
+// =============================
+
+function drawZombie(z) {
+
+    let x = z.x;
+
+    let y =
+        TOP +
+        z.row * CH +
+        CH / 2;
+
+    let s = z.scale;
+
+    ctx.save();
+
+    ctx.translate(x, y);
+
+    ctx.scale(s, s);
+
+
+    // chân
+    rect(
+        -25,
+        45,
+        18,
+        48,
+        "#333"
+    );
+
+    rect(
+        8,
+        45,
+        18,
+        48,
+        "#333"
+    );
+
+
+    // thân
+    rect(
+        -38,
+        -5,
+        76,
+        65,
+        "#526b56"
+    );
+
+
+    // áo
+    rect(
+        -34,
+        5,
+        68,
+        50,
+        "#555d63"
+    );
+
+
+    // đầu
+    circle(
+        0,
+        -45,
+        42,
+        "#91a875"
+    );
+
+
+    // tóc
+    rect(
+        -34,
+        -83,
+        68,
+        16,
+        "#32322d"
+    );
+
+
+    // mắt
+    circle(
+        -14,
+        -50,
+        6,
+        "#111"
+    );
+
+    circle(
+        14,
+        -50,
+        6,
+        "#111"
+    );
+
+
+    // miệng
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        -30,
+        17,
+        0.1,
+        Math.PI - 0.1
+    );
+
+    ctx.stroke();
+
+
+    // cà vạt
+    ctx.fillStyle = "#8b2222";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        0,
+        -2
+    );
+
+    ctx.lineTo(
+        -9,
+        25
+    );
+
+    ctx.lineTo(
+        0,
+        43
+    );
+
+    ctx.lineTo(
+        9,
+        25
+    );
+
+    ctx.fill();
+
+
+    // ZOMBIE XÔ
+    if (
+        z.type === "bucket"
+    ) {
+
+        rect(
+            -35,
+            -102,
+            70,
+            34,
+            "#888"
+        );
+
+        rect(
+            -30,
+            -108,
+            60,
+            9,
+            "#555"
+        );
+
+        line(
+            -35,
+            -82,
+            35,
+            -82,
+            "#444",
+            5
+        );
+    }
+
+
+    // ZOMBIE BIG
+    if (
+        z.type === "big"
+    ) {
+
+        circle(
+            0,
+            -105,
+            18,
+            "#4d4d4d"
+        );
+
+        rect(
+            -58,
+            55,
+            116,
+            18,
+            "#3b3b3b"
+        );
+    }
+
+
+    ctx.restore();
+
+
+    let barW =
+        75 * z.scale;
+
+    rect(
+        x - barW / 2,
+        y - 105 * z.scale,
+        barW,
+        7,
+        "#650000"
+    );
+
+    rect(
+        x - barW / 2,
+        y - 105 * z.scale,
+        barW *
+        Math.max(
+            0,
+            z.hp / z.maxHp
+        ),
+        7,
+        "#22a52f"
+    );
+}
+
+
+// =============================
+// CẬP NHẬT ZOMBIE
+// =============================
 
 function updateZombies() {
 
@@ -1461,9 +1477,28 @@ function updateZombies() {
 
         let z = zombies[i];
 
-        let target = null;
+        if (
+            z.hp <= 0
+        ) {
 
-        for (let p of plants) {
+            zombies.splice(i, 1);
+
+            continue;
+        }
+
+
+        let blocked = false;
+
+
+        for (
+            let p of plants
+        ) {
+
+            if (
+                p.row !== z.row
+            ) {
+                continue;
+            }
 
             let px =
                 BOARD_X +
@@ -1471,45 +1506,57 @@ function updateZombies() {
                 CW / 2;
 
             if (
-                p.row === z.row &&
-                Math.abs(z.x - px) < 65
+                Math.abs(
+                    z.x - px
+                ) < 65
             ) {
 
-                target = p;
+                blocked = true;
+
+                z.attackTimer++;
+
+                if (
+                    z.attackTimer >= 50
+                ) {
+
+                    z.attackTimer = 0;
+
+                    p.hp -=
+                        z.type === "big"
+                            ? 18
+                            : 10;
+                }
+
                 break;
             }
         }
 
 
-        if (target) {
-
-            z.attackTimer++;
-
-            if (z.attackTimer >= 55) {
-
-                target.hp -= 10;
-
-                z.attackTimer = 0;
-            }
-
-        } else {
+        if (!blocked) {
 
             z.x -= z.speed;
         }
 
 
-        if (z.hp <= 0) {
+        // máy cắt cỏ
+        for (
+            let m of mowers
+        ) {
 
-            zombies.splice(
-                i,
-                1
-            );
+            if (
+                m.row === z.row &&
+                !m.active &&
+                z.x < BOARD_X + 50
+            ) {
 
-            continue;
+                m.active = true;
+            }
         }
 
 
-        if (z.x < 0) {
+        if (
+            z.x < 0
+        ) {
 
             gameOver = true;
         }
@@ -1517,62 +1564,296 @@ function updateZombies() {
 }
 
 
-// ==================================================
-// MÁY CẮT
-// ==================================================
+// =============================
+// MÁY CẮT CỎ
+// =============================
 
 function updateMowers() {
 
-    for (let m of mowers) {
+    for (
+        let m of mowers
+    ) {
 
         if (!m.active) {
-
-            let danger =
-                zombies.some(
-                    z =>
-                    z.row === m.row &&
-                    z.x < BOARD_X + 50
-                );
-
-            if (danger) {
-                m.active = true;
-            }
+            continue;
         }
 
+        m.x += 9;
 
-        if (m.active) {
 
-            m.x += 7;
+        for (
+            let i = zombies.length - 1;
+            i >= 0;
+            i--
+        ) {
 
-            for (
-                let i = zombies.length - 1;
-                i >= 0;
-                i--
+            let z = zombies[i];
+
+            if (
+                z.row === m.row &&
+                Math.abs(
+                    z.x - m.x
+                ) < 70
             ) {
 
-                let z = zombies[i];
-
-                if (
-                    z.row === m.row &&
-                    Math.abs(
-                        z.x - m.x
-                    ) < 70
-                ) {
-
-                    zombies.splice(
-                        i,
-                        1
-                    );
-                }
+                zombies.splice(i, 1);
             }
         }
     }
 }
 
 
-// ==================================================
+function drawMowers() {
+
+    for (
+        let m of mowers
+    ) {
+
+        let y = m.y;
+
+        rect(
+            m.x - 35,
+            y - 22,
+            70,
+            35,
+            "#c9362b"
+        );
+
+        circle(
+            m.x - 22,
+            y + 18,
+            12,
+            "#222"
+        );
+
+        circle(
+            m.x + 22,
+            y + 18,
+            12,
+            "#222"
+        );
+
+        line(
+            m.x - 20,
+            y - 20,
+            m.x - 45,
+            y - 55,
+            "#222",
+            7
+        );
+
+        line(
+            m.x - 45,
+            y - 55,
+            m.x - 20,
+            y - 65,
+            "#222",
+            7
+        );
+
+        circle(
+            m.x + 27,
+            y - 8,
+            6,
+            "#ffe84d"
+        );
+    }
+}
+
+
+// =============================
+// BẢNG CỎ
+// =============================
+
+function drawBoard() {
+
+    rect(
+        0,
+        TOP,
+        W,
+        H - TOP,
+        "#67ad43"
+    );
+
+
+    rect(
+        0,
+        TOP,
+        MOWER_W,
+        ROWS * CH,
+        "#4c8e36"
+    );
+
+
+    for (
+        let r = 0;
+        r < ROWS;
+        r++
+    ) {
+
+        for (
+            let c = 0;
+            c < COLS;
+            c++
+        ) {
+
+            let x =
+                BOARD_X +
+                c * CW;
+
+            let y =
+                TOP +
+                r * CH;
+
+            rect(
+                x,
+                y,
+                CW - 2,
+                CH - 2,
+                (r + c) % 2 === 0
+                    ? "#78bd4c"
+                    : "#70b646"
+            );
+
+
+            for (
+                let k = 0;
+                k < 4;
+                k++
+            ) {
+
+                let gx =
+                    x +
+                    20 +
+                    k * 30;
+
+                let gy =
+                    y +
+                    CH -
+                    20;
+
+                line(
+                    gx,
+                    gy,
+                    gx - 3,
+                    gy - 10,
+                    "#4f9638",
+                    2
+                );
+            }
+        }
+    }
+
+
+    for (
+        let r = 0;
+        r <= ROWS;
+        r++
+    ) {
+
+        line(
+            BOARD_X,
+            TOP + r * CH,
+            BOARD_X + COLS * CW,
+            TOP + r * CH,
+            "#3c8230",
+            2
+        );
+    }
+
+
+    for (
+        let c = 0;
+        c <= COLS;
+        c++
+    ) {
+
+        line(
+            BOARD_X + c * CW,
+            TOP,
+            BOARD_X + c * CW,
+            TOP + ROWS * CH,
+            "#3c8230",
+            2
+        );
+    }
+}
+
+
+// =============================
 // MẶT TRỜI
-// ==================================================
+// =============================
+
+function drawSuns() {
+
+    for (
+        let s of suns
+    ) {
+
+        circle(
+            s.x,
+            s.y,
+            24,
+            "#ffd52e"
+        );
+
+        for (
+            let i = 0;
+            i < 8;
+            i++
+        ) {
+
+            let a =
+                i * Math.PI / 4;
+
+            line(
+                s.x + Math.cos(a) * 28,
+                s.y + Math.sin(a) * 28,
+                s.x + Math.cos(a) * 38,
+                s.y + Math.sin(a) * 38,
+                "#e9a900",
+                3
+            );
+        }
+
+        circle(
+            s.x - 7,
+            s.y - 4,
+            3,
+            "#111"
+        );
+
+        circle(
+            s.x + 7,
+            s.y - 4,
+            3,
+            "#111"
+        );
+    }
+}
+
+
+function spawnSun() {
+
+    suns.push({
+
+        x:
+            BOARD_X +
+            Math.random() *
+            (COLS * CW),
+
+        y:
+            TOP +
+            30 +
+            Math.random() *
+            (ROWS * CH - 60),
+
+        value: 25,
+
+        life: 800
+    });
+}
+
 
 function updateSuns() {
 
@@ -1588,31 +1869,156 @@ function updateSuns() {
             suns[i].life <= 0
         ) {
 
-            suns.splice(
-                i,
-                1
-            );
+            suns.splice(i, 1);
         }
     }
 }
 
 
-// ==================================================
-// XÓA CÂY
-// ==================================================
+function collectSun(x, y) {
 
-function removeDeadPlants() {
+    for (
+        let i = suns.length - 1;
+        i >= 0;
+        i--
+    ) {
 
-    plants =
-        plants.filter(
-            p => p.hp > 0
-        );
+        let s = suns[i];
+
+        if (
+            Math.hypot(
+                x - s.x,
+                y - s.y
+            ) < 45
+        ) {
+
+            sun += s.value;
+
+            suns.splice(i, 1);
+
+            return true;
+        }
+    }
+
+    return false;
 }
 
 
-// ==================================================
-// VẼ
-// ==================================================
+// =============================
+// ĐIỀU KHIỂN
+// =============================
+
+function pointerDown(e) {
+
+    e.preventDefault();
+
+    let rc =
+        canvas.getBoundingClientRect();
+
+    let scaleX =
+        W / rc.width;
+
+    let scaleY =
+        H / rc.height;
+
+    let x =
+        (e.clientX - rc.left) *
+        scaleX;
+
+    let y =
+        (e.clientY - rc.top) *
+        scaleY;
+
+
+    if (gameOver) {
+
+        location.reload();
+
+        return;
+    }
+
+
+    if (
+        collectSun(x, y)
+    ) {
+
+        return;
+    }
+
+
+    let cards = [
+        ["sunflower", 190],
+        ["pea", 330],
+        ["wallnut", 470],
+        ["cherry", 610],
+        ["chomper", 750]
+    ];
+
+
+    for (
+        let item of cards
+    ) {
+
+        let type = item[0];
+        let bx = item[1];
+
+        if (
+            x >= bx &&
+            x <= bx + 125 &&
+            y >= 10 &&
+            y <= 100
+        ) {
+
+            selected = type;
+
+            return;
+        }
+    }
+
+
+    if (
+        x < BOARD_X
+    ) {
+
+        return;
+    }
+
+
+    if (
+        y < TOP
+    ) {
+
+        return;
+    }
+
+
+    let col =
+        Math.floor(
+            (x - BOARD_X) / CW
+        );
+
+    let row =
+        Math.floor(
+            (y - TOP) / CH
+        );
+
+
+    plantAt(
+        row,
+        col
+    );
+}
+
+
+canvas.addEventListener(
+    "pointerdown",
+    pointerDown
+);
+
+
+// =============================
+// VÒNG LẶP GAME
+// =============================
 
 function draw() {
 
@@ -1623,29 +2029,33 @@ function draw() {
         H
     );
 
-    veNen();
+    drawBoard();
 
-    veThanhDieuKhien();
+    drawTop();
 
-    for (let m of mowers) {
-        veMayCat(m);
+    drawMowers();
+
+
+    for (
+        let p of plants
+    ) {
+
+        drawPlant(p);
     }
 
-    for (let p of plants) {
-        veCay(p);
+
+    drawBullets();
+
+
+    for (
+        let z of zombies
+    ) {
+
+        drawZombie(z);
     }
 
-    for (let b of bullets) {
-        veDan(b);
-    }
 
-    for (let z of zombies) {
-        veZombie(z);
-    }
-
-    for (let s of suns) {
-        veSun(s);
-    }
+    drawSuns();
 
 
     if (gameOver) {
@@ -1655,258 +2065,90 @@ function draw() {
             0,
             W,
             H,
-            "rgba(0,0,0,0.72)"
+            "rgba(0,0,0,0.65)"
         );
 
-        ctx.fillStyle = "#fff";
-        ctx.textAlign = "center";
-
-        ctx.font =
-            "bold 70px Arial";
-
-        ctx.fillText(
-            "THUA RỒI",
+        text(
+            "GAME OVER",
             W / 2,
-            H / 2 - 20
+            H / 2 - 35,
+            65,
+            "#ffffff"
         );
 
-        ctx.font =
-            "bold 28px Arial";
-
-        ctx.fillText(
+        text(
             "Chạm màn hình để chơi lại",
             W / 2,
-            H / 2 + 40
+            H / 2 + 35,
+            25,
+            "#ffffff"
         );
     }
 }
 
 
-// ==================================================
-// CHẠM / CLICK
-// ==================================================
+function update() {
 
-canvas.addEventListener(
-    "pointerdown",
-    function(e) {
-
-        e.preventDefault();
-
-        let rectCanvas =
-            canvas.getBoundingClientRect();
-
-        let x =
-            (e.clientX -
-             rectCanvas.left)
-            * W /
-            rectCanvas.width;
-
-        let y =
-            (e.clientY -
-             rectCanvas.top)
-            * H /
-            rectCanvas.height;
-
-
-        if (gameOver) {
-
-            location.reload();
-
-            return;
-        }
-
-
-        // THANH CHỌN CÂY
-        if (y < TOP) {
-
-            if (
-                x >= 225 &&
-                x < 380
-            ) {
-
-                selectedPlant =
-                    "sunflower";
-
-                return;
-            }
-
-            if (
-                x >= 395 &&
-                x < 550
-            ) {
-
-                selectedPlant =
-                    "pea";
-
-                return;
-            }
-
-            if (
-                x >= 565 &&
-                x < 720
-            ) {
-
-                selectedPlant =
-                    "wallnut";
-
-                return;
-            }
-
-            if (
-                x >= 735 &&
-                x < 890
-            ) {
-
-                selectedPlant =
-                    "cherry";
-
-                return;
-            }
-        }
-
-
-        // NHẶT MẶT TRỜI
-        for (
-            let i = suns.length - 1;
-            i >= 0;
-            i--
-        ) {
-
-            let s = suns[i];
-
-            let dx =
-                x - s.x;
-
-            let dy =
-                y - s.y;
-
-            if (
-                Math.sqrt(
-                    dx * dx +
-                    dy * dy
-                ) < 42
-            ) {
-
-                sun += 25;
-
-                suns.splice(
-                    i,
-                    1
-                );
-
-                return;
-            }
-        }
-
-
-        // KHU MÁY CẮT
-        if (x < BOARD_X) {
-            return;
-        }
-
-
-        // BÀN CỎ
-        let col =
-            Math.floor(
-                (x - BOARD_X) /
-                CW
-            );
-
-        let row =
-            Math.floor(
-                (y - TOP) /
-                CH
-            );
-
-
-        if (
-            row < 0 ||
-            row >= ROWS ||
-            col < 0 ||
-            col >= COLS
-        ) {
-
-            return;
-        }
-
-
-        if (selectedPlant) {
-
-            trongCay(
-                row,
-                col,
-                selectedPlant
-            );
-
-            selectedPlant = null;
-        }
-
-    },
-    {
-        passive: false
-    }
-);
-
-
-// ==================================================
-// GAME LOOP
-// ==================================================
-
-function loop(time) {
-
-    let delta =
-        time - lastTime;
-
-    lastTime = time;
-
-
-    if (!gameOver) {
-
-        zombieTimer += delta;
-
-        naturalSunTimer += delta;
-
-
-        if (
-            zombieTimer >= 3500
-        ) {
-
-            taoZombie();
-
-            zombieTimer = 0;
-        }
-
-
-        if (
-            naturalSunTimer >= 7000
-        ) {
-
-            taoMatTroiTuNhien();
-
-            naturalSunTimer = 0;
-        }
-
-
-        updatePlants();
-        updateBullets();
-        updateZombies();
-        updateMowers();
-        updateSuns();
-        removeDeadPlants();
+    if (gameOver) {
+        return;
     }
 
+    frame++;
+
+    updatePlants();
+
+    updateBullets();
+
+    updateZombies();
+
+    updateMowers();
+
+    updateSuns();
+
+
+    if (
+        frame % 210 === 0
+    ) {
+
+        spawnZombie();
+    }
+
+
+    if (
+        frame % 420 === 0
+    ) {
+
+        spawnSun();
+    }
+
+
+    for (
+        let i = plants.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        if (
+            plants[i].hp <= 0
+        ) {
+
+            plants.splice(i, 1);
+        }
+    }
+}
+
+
+function loop() {
+
+    update();
 
     draw();
 
-    requestAnimationFrame(
-        loop
-    );
+    requestAnimationFrame(loop);
 }
 
 
-requestAnimationFrame(
-    loop
-);
+loop();
 
 </script>
 
@@ -1916,7 +2158,7 @@ requestAnimationFrame(
 
     components.html(
         game,
-        height=875,
+        height=905,
         scrolling=False
     )
 
