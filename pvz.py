@@ -4,815 +4,263 @@ import streamlit.components.v1 as components
 
 
 def main():
+
     st.set_page_config(
-        page_title="Vườn chiến đấu",
+        page_title="PVZ",
+        page_icon="🌻",
         layout="wide"
     )
 
-    game = r"""
+    html = r"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 
 <style>
-html, body {
+
+body {
     margin: 0;
-    padding: 0;
-    background: #111;
-    overflow: hidden;
-    touch-action: none;
+    background: #b9e89b;
+    font-family: Arial;
+    text-align: center;
+}
+
+#info {
+    font-size: 22px;
+    font-weight: bold;
+    margin: 8px;
 }
 
 canvas {
-    display: block;
-    margin: auto;
-    background: #79bd4b;
+    width: 100%;
+    max-width: 1000px;
+    border: 4px solid #39752a;
+    border-radius: 12px;
+    background: #70bd45;
     touch-action: none;
 }
+
+.controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 7px;
+    margin: 8px;
+}
+
+button {
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 2px solid #555;
+    background: white;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#selected {
+    font-size: 18px;
+    font-weight: bold;
+}
+
 </style>
 </head>
 
 <body>
 
-<canvas id="game" width="1400" height="900"></canvas>
+<div id="info">
+☀️ Sun: <span id="sun">200</span>
+&nbsp;&nbsp;
+🏆 Điểm: <span id="score">0</span>
+</div>
+
+<canvas id="game" width="1000" height="600"></canvas>
+
+<div class="controls">
+
+<button onclick="chonCay('sunflower')">
+🌻 Mặt Trời - 50
+</button>
+
+<button onclick="chonCay('pea')">
+🌱 Đậu - 50
+</button>
+
+<button onclick="chonCay('nut')">
+🥜 Óc chó - 50
+</button>
+
+<button onclick="chonCay('cherry')">
+🍒 Cherry - 100
+</button>
+
+<button onclick="choiLai()">
+🔄 Chơi lại
+</button>
+
+</div>
+
+<div id="selected">
+Chưa chọn cây
+</div>
+
 
 <script>
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-const W = 1400;
-const H = 900;
+const W = 1000;
+const H = 600;
 
 const ROWS = 5;
 const COLS = 9;
 
-const TOP = 115;
-const MOWER_W = 130;
-const BOARD_X = 130;
+const CW = 100;
+const CH = 120;
 
-const CW = 135;
-const CH = 145;
 
 let sun = 200;
-let selected = "sunflower";
+let score = 0;
 
-let gameOver = false;
-let frame = 0;
+let selected = null;
 
 let plants = [];
 let zombies = [];
-let bullets = [];
+let peas = [];
 let suns = [];
+let explosions = [];
+
 let mowers = [];
 
+let gameOver = false;
 
-// =============================
-// CÁC LOẠI CÂY
-// =============================
-
-const plantInfo = {
-
-    sunflower: {
-        name: "Hướng dương",
-        cost: 50
-    },
-
-    pea: {
-        name: "Đậu",
-        cost: 50
-    },
-
-    wallnut: {
-        name: "Wall-nut",
-        cost: 50
-    },
-
-    cherry: {
-        name: "Cherry",
-        cost: 100
-    },
-
-    chomper: {
-        name: "Cây ăn thịt",
-        cost: 125
-    }
-};
+let lastZombie = 0;
+let lastSun = 0;
+let lastShot = 0;
 
 
-// =============================
+// ========================================
 // MÁY CẮT CỎ
-// =============================
+// ========================================
 
-for (let r = 0; r < ROWS; r++) {
+function taoMayCatCo() {
 
-    mowers.push({
-        row: r,
-        x: 35,
-        y: TOP + r * CH + CH / 2,
-        active: false
-    });
+    mowers = [];
 
-}
+    for (let r = 0; r < ROWS; r++) {
 
+        mowers.push({
+            row: r,
+            x: 15,
+            active: false,
+            used: false
+        });
 
-// =============================
-// HÀM VẼ
-// =============================
-
-function rect(x, y, w, h, color) {
-    ctx.fillStyle = color;
-    ctx.fillRect(x, y, w, h);
-}
-
-
-function circle(x, y, r, color) {
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-
-function line(x1, y1, x2, y2, color, width = 2) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-}
-
-
-function text(t, x, y, size, color = "#000", align = "center") {
-    ctx.fillStyle = color;
-    ctx.font = "bold " + size + "px Arial";
-    ctx.textAlign = align;
-    ctx.fillText(t, x, y);
-}
-
-
-// =============================
-// THANH TRÊN
-// =============================
-
-function drawTop() {
-
-    rect(0, 0, W, TOP, "#d8d8d8");
-
-    rect(15, 15, 155, 82, "#fff1a8");
-
-    circle(55, 55, 27, "#ffd52e");
-
-    for (let i = 0; i < 8; i++) {
-
-        let a = i * Math.PI / 4;
-
-        line(
-            55 + Math.cos(a) * 33,
-            55 + Math.sin(a) * 33,
-            55 + Math.cos(a) * 43,
-            55 + Math.sin(a) * 43,
-            "#e7a900",
-            3
-        );
     }
-
-    text(String(sun), 110, 65, 27, "#222", "left");
-
-
-    let cards = [
-        ["sunflower", 190],
-        ["pea", 330],
-        ["wallnut", 470],
-        ["cherry", 610],
-        ["chomper", 750]
-    ];
-
-
-    for (let item of cards) {
-
-        let type = item[0];
-        let x = item[1];
-
-        let info = plantInfo[type];
-
-        let active = selected === type;
-
-        rect(
-            x,
-            10,
-            125,
-            90,
-            active ? "#c7a5e8" : "#eeeeee"
-        );
-
-        ctx.strokeStyle =
-            active ? "#6d239e" : "#777";
-
-        ctx.lineWidth =
-            active ? 4 : 2;
-
-        ctx.strokeRect(
-            x,
-            10,
-            125,
-            90
-        );
-
-        drawPlantSmall(
-            type,
-            x + 32,
-            55
-        );
-
-        text(
-            info.name,
-            x + 70,
-            39,
-            13,
-            "#111"
-        );
-
-        text(
-            info.cost,
-            x + 70,
-            75,
-            17,
-            info.cost <= sun
-                ? "#075f16"
-                : "#a00000"
-        );
-    }
-
-
-    text(
-        "Chọn cây rồi chạm vào ô cỏ để trồng",
-        920,
-        45,
-        18,
-        "#222",
-        "left"
-    );
-
-    text(
-        "Zombie thường - Xô - Big",
-        920,
-        75,
-        17,
-        "#333",
-        "left"
-    );
 }
 
 
-// =============================
-// CÂY NHỎ TRÊN MENU
-// =============================
+// ========================================
+// CHỌN CÂY
+// ========================================
 
-function drawPlantSmall(type, x, y) {
+function chonCay(type) {
+
+    selected = type;
 
     if (type === "sunflower") {
 
-        circle(x, y, 15, "#9b5b22");
+        document.getElementById("selected").innerText =
+        "🌻 Đã chọn Cây Mặt Trời — chạm ô cỏ để trồng";
 
-        for (let i = 0; i < 8; i++) {
-
-            let a = i * Math.PI / 4;
-
-            circle(
-                x + Math.cos(a) * 17,
-                y + Math.sin(a) * 17,
-                8,
-                "#ffd72e"
-            );
-        }
     }
 
+    if (type === "pea") {
 
-    else if (type === "pea") {
+        document.getElementById("selected").innerText =
+        "🌱 Đã chọn Đậu — chạm ô cỏ để trồng";
 
-        line(
-            x,
-            y + 22,
-            x,
-            y + 42,
-            "#248a31",
-            5
-        );
-
-        circle(x, y, 19, "#3caf35");
-
-        circle(x - 7, y - 5, 3, "#111");
-        circle(x + 7, y - 5, 3, "#111");
-
-        circle(x + 19, y + 2, 7, "#167025");
     }
 
+    if (type === "nut") {
 
-    else if (type === "wallnut") {
+        document.getElementById("selected").innerText =
+        "🥜 Đã chọn Óc chó — chạm ô cỏ để trồng";
 
-        ctx.fillStyle = "#a86627";
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            x,
-            y,
-            22,
-            29,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        circle(x - 7, y - 5, 3, "#111");
-        circle(x + 7, y - 5, 3, "#111");
     }
 
+    if (type === "cherry") {
 
-    else if (type === "cherry") {
+        document.getElementById("selected").innerText =
+        "🍒 Đã chọn Cherry — chạm ô cỏ để trồng";
 
-        circle(x - 10, y + 3, 13, "#d92828");
-        circle(x + 10, y + 3, 13, "#d92828");
-
-        line(
-            x,
-            y - 7,
-            x + 8,
-            y - 25,
-            "#276c25",
-            4
-        );
-    }
-
-
-    // CÂY ĂN THỊT TÍM
-    else if (type === "chomper") {
-
-        line(
-            x,
-            y + 18,
-            x,
-            y + 42,
-            "#57227a",
-            5
-        );
-
-        circle(
-            x - 14,
-            y + 35,
-            13,
-            "#7334a3"
-        );
-
-        circle(
-            x + 14,
-            y + 35,
-            13,
-            "#7334a3"
-        );
-
-        circle(
-            x,
-            y,
-            22,
-            "#7b3fb0"
-        );
-
-        ctx.fillStyle = "#c78bea";
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x - 17,
-            y + 4
-        );
-
-        ctx.quadraticCurveTo(
-            x,
-            y + 27,
-            x + 17,
-            y + 4
-        );
-
-        ctx.fill();
-
-        circle(
-            x - 7,
-            y - 6,
-            3,
-            "#111"
-        );
-
-        circle(
-            x + 7,
-            y - 6,
-            3,
-            "#111"
-        );
     }
 }
 
 
-// =============================
-// VẼ CÂY
-// =============================
+// ========================================
+// BẤM VÀO GAME
+// ========================================
 
-function drawPlant(p) {
+canvas.addEventListener("pointerdown", function(e) {
 
-    let x =
-        BOARD_X +
-        p.col * CW +
-        CW / 2;
+    e.preventDefault();
 
-    let y =
-        TOP +
-        p.row * CH +
-        CH / 2;
+    if (gameOver) return;
+
+    const rect = canvas.getBoundingClientRect();
+
+    const x =
+        (e.clientX - rect.left)
+        * W / rect.width;
+
+    const y =
+        (e.clientY - rect.top)
+        * H / rect.height;
 
 
-    if (p.type === "sunflower") {
+    // ====================================
+    // NHẶT MẶT TRỜI
+    // ====================================
 
-        line(
-            x,
-            y + 25,
-            x,
-            y + 58,
-            "#257c29",
-            7
-        );
+    for (let i = suns.length - 1; i >= 0; i--) {
 
-        circle(
-            x - 15,
-            y + 40,
-            13,
-            "#3c9e36"
-        );
+        let s = suns[i];
 
-        circle(
-            x + 15,
-            y + 40,
-            13,
-            "#3c9e36"
-        );
+        let dx = x - s.x;
+        let dy = y - s.y;
 
-        for (let i = 0; i < 10; i++) {
+        if (
+            Math.sqrt(dx * dx + dy * dy) < 55
+        ) {
 
-            let a =
-                i * Math.PI * 2 / 10;
+            sun += 25;
 
-            circle(
-                x + Math.cos(a) * 31,
-                y + Math.sin(a) * 31,
-                14,
-                "#ffd735"
-            );
+            suns.splice(i, 1);
+
+            capNhat();
+
+            return;
         }
-
-        circle(
-            x,
-            y,
-            25,
-            "#8b5224"
-        );
-
-        circle(
-            x - 9,
-            y - 5,
-            4,
-            "#111"
-        );
-
-        circle(
-            x + 9,
-            y - 5,
-            4,
-            "#111"
-        );
     }
 
 
-    else if (p.type === "pea") {
+    // ====================================
+    // CHƯA CHỌN CÂY
+    // ====================================
 
-        line(
-            x,
-            y + 28,
-            x,
-            y + 60,
-            "#277c2d",
-            8
-        );
+    if (!selected) return;
 
-        circle(
-            x - 17,
-            y + 43,
-            16,
-            "#319d36"
-        );
 
-        circle(
-            x + 17,
-            y + 43,
-            16,
-            "#319d36"
-        );
+    // ====================================
+    // TÍNH Ô
+    // ====================================
 
-        circle(
-            x,
-            y,
-            31,
-            "#42ad3c"
-        );
+    let col = Math.floor(x / CW);
 
-        circle(
-            x - 10,
-            y - 8,
-            5,
-            "#111"
-        );
+    let row = Math.floor(y / CH);
 
-        circle(
-            x + 10,
-            y - 8,
-            5,
-            "#111"
-        );
-
-        circle(
-            x + 29,
-            y + 2,
-            12,
-            "#207c2a"
-        );
-    }
-
-
-    else if (p.type === "wallnut") {
-
-        ctx.fillStyle = "#a96828";
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            x,
-            y,
-            40,
-            50,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        ctx.strokeStyle = "#714117";
-        ctx.lineWidth = 3;
-
-        for (let i = -2; i <= 2; i++) {
-
-            line(
-                x + i * 10,
-                y - 30,
-                x + i * 13,
-                y + 35,
-                "#714117",
-                2
-            );
-        }
-
-        circle(
-            x - 13,
-            y - 8,
-            6,
-            "#111"
-        );
-
-        circle(
-            x + 13,
-            y - 8,
-            6,
-            "#111"
-        );
-    }
-
-
-    else if (p.type === "cherry") {
-
-        circle(
-            x - 23,
-            y + 5,
-            28,
-            "#d92828"
-        );
-
-        circle(
-            x + 23,
-            y + 5,
-            28,
-            "#d92828"
-        );
-
-        line(
-            x,
-            y - 15,
-            x + 17,
-            y - 48,
-            "#286c25",
-            7
-        );
-
-        circle(
-            x + 23,
-            y - 42,
-            13,
-            "#3d9c38"
-        );
-    }
-
-
-    // ==================================
-    // CÂY ĂN THỊT MÀU TÍM
-    // ==================================
-
-    else if (p.type === "chomper") {
-
-        // thân tím đậm
-        line(
-            x,
-            y + 28,
-            x,
-            y + 62,
-            "#54206f",
-            9
-        );
-
-        // lá tím
-        circle(
-            x - 20,
-            y + 45,
-            17,
-            "#71359b"
-        );
-
-        circle(
-            x + 20,
-            y + 45,
-            17,
-            "#71359b"
-        );
-
-        // đầu tím
-        circle(
-            x,
-            y,
-            43,
-            "#803bb5"
-        );
-
-        // phần miệng tím sáng
-        ctx.fillStyle = "#d29af0";
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x - 34,
-            y + 2
-        );
-
-        ctx.quadraticCurveTo(
-            x,
-            y + 43,
-            x + 34,
-            y + 2
-        );
-
-        ctx.quadraticCurveTo(
-            x,
-            y + 17,
-            x - 34,
-            y + 2
-        );
-
-        ctx.fill();
-
-
-        // viền miệng
-        ctx.strokeStyle = "#4c1768";
-        ctx.lineWidth = 4;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x - 34,
-            y + 2
-        );
-
-        ctx.quadraticCurveTo(
-            x,
-            y + 43,
-            x + 34,
-            y + 2
-        );
-
-        ctx.stroke();
-
-
-        // răng
-        for (let i = -2; i <= 2; i++) {
-
-            ctx.fillStyle = "#ffffff";
-
-            ctx.beginPath();
-
-            ctx.moveTo(
-                x + i * 12 - 5,
-                y + 7
-            );
-
-            ctx.lineTo(
-                x + i * 12,
-                y + 20
-            );
-
-            ctx.lineTo(
-                x + i * 12 + 5,
-                y + 7
-            );
-
-            ctx.fill();
-        }
-
-
-        // mắt
-        circle(
-            x - 13,
-            y - 18,
-            5,
-            "#111"
-        );
-
-        circle(
-            x + 13,
-            y - 18,
-            5,
-            "#111"
-        );
-
-
-        // má
-        circle(
-            x - 31,
-            y - 2,
-            6,
-            "#b96bdd"
-        );
-
-        circle(
-            x + 31,
-            y - 2,
-            6,
-            "#b96bdd"
-        );
-    }
-
-
-    // thanh máu
-    if (p.type !== "sunflower") {
-
-        let hpWidth = 75;
-
-        rect(
-            x - hpWidth / 2,
-            y + 67,
-            hpWidth,
-            7,
-            "#7a0000"
-        );
-
-        rect(
-            x - hpWidth / 2,
-            y + 67,
-            hpWidth *
-            Math.max(
-                0,
-                p.hp / p.maxHp
-            ),
-            7,
-            "#26a52f"
-        );
-    }
-}
-
-
-// =============================
-// TRỒNG CÂY
-// =============================
-
-function plantAt(row, col) {
 
     if (
         row < 0 ||
@@ -820,88 +268,1437 @@ function plantAt(row, col) {
         col < 0 ||
         col >= COLS
     ) {
+
         return;
     }
 
-    let exists = plants.find(
-        p =>
-            p.row === row &&
-            p.col === col
+
+    // ====================================
+    // KIỂM TRA ĐÃ CÓ CÂY
+    // ====================================
+
+    let daCoCay = plants.some(p =>
+        p.row === row &&
+        p.col === col
     );
 
-    if (exists) return;
 
-    let info =
-        plantInfo[selected];
+    if (daCoCay) {
 
-    if (sun < info.cost) return;
-
-    sun -= info.cost;
-
-    let hp = 120;
-
-    if (selected === "wallnut") {
-        hp = 350;
+        return;
     }
 
-    if (selected === "chomper") {
-        hp = 180;
+
+    // ====================================
+    // GIÁ CÂY
+    // ====================================
+
+    let gia = 0;
+
+    if (selected === "sunflower") gia = 50;
+    if (selected === "pea") gia = 50;
+    if (selected === "nut") gia = 50;
+    if (selected === "cherry") gia = 100;
+
+
+    // ====================================
+    // KHÔNG ĐỦ SUN
+    // ====================================
+
+    if (sun < gia) {
+
+        document.getElementById("selected").innerText =
+        "❌ Không đủ Sun!";
+
+        return;
     }
+
+
+    // ====================================
+    // TRỪ SUN
+    // ====================================
+
+    sun -= gia;
+
+
+    // ====================================
+    // TRỒNG CÂY
+    // ====================================
 
     plants.push({
 
         type: selected,
 
         row: row,
+
         col: col,
 
-        hp: hp,
-        maxHp: hp,
+        hp:
+            selected === "nut"
+            ? 300
+            : 100,
 
-        timer: 0,
+        timer: 0
 
-        eating: false,
-        eatTimer: 0
     });
-}
 
 
-// =============================
-// BẮN ĐẠN
-// =============================
+    capNhat();
 
-function shoot(p) {
+});
 
-    let x =
-        BOARD_X +
-        p.col * CW +
-        CW / 2 +
-        35;
 
-    let y =
-        TOP +
-        p.row * CH +
-        CH / 2;
+// ========================================
+// TẠO MẶT TRỜI
+// ========================================
 
-    bullets.push({
+function taoMatTroi(x, y) {
+
+    suns.push({
 
         x: x,
+
         y: y,
 
-        row: p.row,
+        life: 900
 
-        speed: 10,
-
-        damage: 25
     });
+
 }
 
 
-// =============================
-// CẬP NHẬT CÂY
-// =============================
+// ========================================
+// VẼ NỀN
+// ========================================
 
-function updatePlants() {
+function veNen() {
+
+    ctx.fillStyle = "#72c44b";
+
+    ctx.fillRect(
+        0,
+        0,
+        W,
+        H
+    );
+
+
+    for (let r = 0; r < ROWS; r++) {
+
+        for (let c = 0; c < COLS; c++) {
+
+            ctx.fillStyle =
+                (r + c) % 2 === 0
+                ? "#78ca50"
+                : "#6fbd45";
+
+
+            ctx.fillRect(
+                c * CW,
+                r * CH,
+                CW,
+                CH
+            );
+
+
+            ctx.strokeStyle =
+                "rgba(40,90,30,0.25)";
+
+            ctx.strokeRect(
+                c * CW,
+                r * CH,
+                CW,
+                CH
+            );
+
+        }
+
+    }
+
+}
+
+
+// ========================================
+// VẼ CÂY MẶT TRỜI
+// ========================================
+
+function veSunflower(p) {
+
+    let x =
+        p.col * CW + 50;
+
+    let y =
+        p.row * CH + 65;
+
+
+    // thân
+
+    ctx.strokeStyle = "#28752b";
+
+    ctx.lineWidth = 10;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x,
+        y + 45
+    );
+
+    ctx.lineTo(
+        x,
+        y - 5
+    );
+
+    ctx.stroke();
+
+
+    // lá trái
+
+    ctx.fillStyle = "#3d9f3d";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x - 20,
+        y + 20,
+        28,
+        13,
+        -0.4,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // lá phải
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x + 20,
+        y + 25,
+        28,
+        13,
+        0.4,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // cánh hoa
+
+    for (let i = 0; i < 12; i++) {
+
+        let a =
+            i * Math.PI / 6;
+
+        let px =
+            x + Math.cos(a) * 27;
+
+        let py =
+            y - 15 +
+            Math.sin(a) * 27;
+
+
+        ctx.fillStyle = "#ffd52f";
+
+        ctx.beginPath();
+
+        ctx.arc(
+            px,
+            py,
+            13,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.fill();
+
+    }
+
+
+    // mặt
+
+    ctx.fillStyle = "#8a571d";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y - 15,
+        25,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // mắt
+
+    ctx.fillStyle = "white";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 9,
+        y - 20,
+        6,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 9,
+        y - 20,
+        6,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "black";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 9,
+        y - 20,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 9,
+        y - 20,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // miệng
+
+    ctx.strokeStyle = "#3e230c";
+
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y - 12,
+        9,
+        0,
+        Math.PI
+    );
+
+    ctx.stroke();
+
+}
+
+
+// ========================================
+// VẼ ĐẬU
+// ========================================
+
+function veDau(p) {
+
+    let x =
+        p.col * CW + 50;
+
+    let y =
+        p.row * CH + 65;
+
+
+    ctx.strokeStyle = "#28752b";
+
+    ctx.lineWidth = 10;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x, y + 45);
+
+    ctx.lineTo(x, y);
+
+    ctx.stroke();
+
+
+    ctx.fillStyle = "#3c9f3c";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x - 20,
+        y + 20,
+        27,
+        12,
+        -0.4,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "#4caf50";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y - 20,
+        32,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // miệng súng
+
+    ctx.fillStyle = "#337f36";
+
+    ctx.beginPath();
+
+    ctx.ellipse(
+        x + 28,
+        y - 20,
+        25,
+        16,
+        0,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // mắt
+
+    ctx.fillStyle = "white";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 10,
+        y - 25,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 7,
+        y - 25,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "black";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 9,
+        y - 25,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 8,
+        y - 25,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+}
+
+
+// ========================================
+// VẼ ÓC CHÓ
+// ========================================
+
+function veOcCho(p) {
+
+    let x =
+        p.col * CW + 50;
+
+    let y =
+        p.row * CH + 60;
+
+
+    ctx.fillStyle = "#a86a2b";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y,
+        38,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.strokeStyle = "#704117";
+
+    ctx.lineWidth = 4;
+
+    ctx.stroke();
+
+
+    // vết nứt
+
+    ctx.strokeStyle = "#60350f";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x - 5,
+        y - 30
+    );
+
+    ctx.lineTo(
+        x - 12,
+        y - 5
+    );
+
+    ctx.lineTo(
+        x + 5,
+        y + 5
+    );
+
+    ctx.lineTo(
+        x,
+        y + 25
+    );
+
+    ctx.stroke();
+
+
+    // mắt
+
+    ctx.fillStyle = "white";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 12,
+        y - 8,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 12,
+        y - 8,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "black";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 12,
+        y - 8,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 12,
+        y - 8,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+}
+
+
+// ========================================
+// VẼ CHERRY
+// ========================================
+
+function veCherry(p) {
+
+    let x =
+        p.col * CW + 50;
+
+    let y =
+        p.row * CH + 65;
+
+
+    ctx.strokeStyle = "#176e24";
+
+    ctx.lineWidth = 5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x,
+        y - 20
+    );
+
+    ctx.lineTo(
+        x - 10,
+        y - 50
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x,
+        y - 20
+    );
+
+    ctx.lineTo(
+        x + 10,
+        y - 50
+    );
+
+    ctx.stroke();
+
+
+    ctx.fillStyle = "#d92828";
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 20,
+        y,
+        25,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 20,
+        y,
+        25,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+}
+
+
+// ========================================
+// VẼ ZOMBIE
+// ========================================
+
+function veZombie(z) {
+
+    let x = z.x;
+
+    let y =
+        z.row * CH + 65;
+
+
+    // chân
+
+    ctx.fillStyle = "#293e78";
+
+    ctx.fillRect(
+        x - 18,
+        y + 30,
+        12,
+        35
+    );
+
+    ctx.fillRect(
+        x + 8,
+        y + 30,
+        12,
+        35
+    );
+
+
+    // thân
+
+    ctx.fillStyle = "#587c3d";
+
+    ctx.fillRect(
+        x - 25,
+        y - 5,
+        50,
+        50
+    );
+
+
+    // tay
+
+    ctx.strokeStyle = "#587c3d";
+
+    ctx.lineWidth = 12;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x - 20,
+        y
+    );
+
+    ctx.lineTo(
+        x - 48,
+        y + 20
+    );
+
+    ctx.stroke();
+
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        x + 20,
+        y
+    );
+
+    ctx.lineTo(
+        x + 48,
+        y + 20
+    );
+
+    ctx.stroke();
+
+
+    // đầu
+
+    ctx.fillStyle = "#789650";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y - 30,
+        31,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // tóc
+
+    ctx.fillStyle = "#38271d";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x,
+        y - 48,
+        27,
+        Math.PI,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // mắt
+
+    ctx.fillStyle = "white";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 10,
+        y - 32,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 10,
+        y - 32,
+        7,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.fillStyle = "black";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x - 10,
+        y - 32,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        x + 10,
+        y - 32,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // miệng
+
+    ctx.fillStyle = "#321";
+
+    ctx.fillRect(
+        x - 17,
+        y - 12,
+        34,
+        10
+    );
+
+
+    // máu
+
+    ctx.fillStyle = "#222";
+
+    ctx.fillRect(
+        x - 30,
+        y - 72,
+        60,
+        7
+    );
+
+    ctx.fillStyle = "#e33";
+
+    ctx.fillRect(
+        x - 30,
+        y - 72,
+        60 * z.hp / 100,
+        7
+    );
+
+}
+
+
+// ========================================
+// VẼ MÁY CẮT CỎ
+// ========================================
+
+function veMayCat(m) {
+
+    let y =
+        m.row * CH + 70;
+
+
+    ctx.fillStyle =
+        m.used ? "#777" : "#d63232";
+
+
+    ctx.fillRect(
+        m.x,
+        y,
+        50,
+        30
+    );
+
+
+    ctx.strokeStyle = "#333";
+
+    ctx.lineWidth = 6;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        m.x + 15,
+        y
+    );
+
+    ctx.lineTo(
+        m.x + 15,
+        y - 35
+    );
+
+    ctx.lineTo(
+        m.x + 45,
+        y - 35
+    );
+
+    ctx.stroke();
+
+
+    ctx.fillStyle = "#222";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        m.x + 10,
+        y + 30,
+        10,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        m.x + 40,
+        y + 30,
+        10,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+}
+
+
+// ========================================
+// VẼ MẶT TRỜI
+// ========================================
+
+function veMatTroi(s) {
+
+    ctx.save();
+
+    ctx.translate(
+        s.x,
+        s.y
+    );
+
+
+    // tia sáng
+
+    ctx.strokeStyle = "#ffbd00";
+
+    ctx.lineWidth = 5;
+
+    for (let i = 0; i < 12; i++) {
+
+        let a =
+            i * Math.PI / 6;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            Math.cos(a) * 32,
+            Math.sin(a) * 32
+        );
+
+        ctx.lineTo(
+            Math.cos(a) * 48,
+            Math.sin(a) * 48
+        );
+
+        ctx.stroke();
+
+    }
+
+
+    // mặt trời
+
+    ctx.fillStyle = "#ffd83d";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        0,
+        0,
+        32,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+
+    // số 25
+
+    ctx.fillStyle = "#8a6100";
+
+    ctx.font = "bold 18px Arial";
+
+    ctx.textAlign = "center";
+
+    ctx.textBaseline = "middle";
+
+    ctx.fillText(
+        "25",
+        0,
+        0
+    );
+
+
+    ctx.restore();
+
+}
+
+
+// ========================================
+// VẼ ĐẠN
+// ========================================
+
+function veDan(b) {
+
+    ctx.fillStyle = "#43bd39";
+
+    ctx.beginPath();
+
+    ctx.arc(
+        b.x,
+        b.y,
+        9,
+        0,
+        Math.PI * 2
+    );
+
+    ctx.fill();
+
+}
+
+
+// ========================================
+// VẼ TẤT CẢ
+// ========================================
+
+function veGame() {
+
+    veNen();
+
+
+    // máy cắt cỏ
+
+    for (let m of mowers) {
+
+        if (!m.used) {
+
+            veMayCat(m);
+
+        }
+
+    }
+
+
+    // cây
+
+    for (let p of plants) {
+
+        if (p.type === "sunflower") {
+
+            veSunflower(p);
+
+        }
+
+        if (p.type === "pea") {
+
+            veDau(p);
+
+        }
+
+        if (p.type === "nut") {
+
+            veOcCho(p);
+
+        }
+
+        if (p.type === "cherry") {
+
+            veCherry(p);
+
+        }
+
+    }
+
+
+    // đạn
+
+    for (let b of peas) {
+
+        veDan(b);
+
+    }
+
+
+    // zombie
+
+    for (let z of zombies) {
+
+        veZombie(z);
+
+    }
+
+
+    // mặt trời
+
+    for (let s of suns) {
+
+        veMatTroi(s);
+
+    }
+
+
+    // game over
+
+    if (gameOver) {
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.65)";
+
+        ctx.fillRect(
+            0,
+            0,
+            W,
+            H
+        );
+
+
+        ctx.fillStyle = "white";
+
+        ctx.textAlign = "center";
+
+        ctx.font = "bold 55px Arial";
+
+        ctx.fillText(
+            "GAME OVER",
+            W / 2,
+            H / 2
+        );
+
+        ctx.font = "bold 25px Arial";
+
+        ctx.fillText(
+            "Điểm: " + score,
+            W / 2,
+            H / 2 + 45
+        );
+
+    }
+
+}
+
+
+// ========================================
+// CÂY MẶT TRỜI TẠO SUN
+// ========================================
+
+function capNhatCayMatTroi() {
+
+    for (let p of plants) {
+
+        if (p.type !== "sunflower") continue;
+
+
+        p.timer++;
+
+
+        // khoảng 8 giây tạo 1 mặt trời
+
+        if (p.timer >= 480) {
+
+            let x =
+                p.col * CW + 50;
+
+            let y =
+                p.row * CH + 20;
+
+
+            taoMatTroi(
+                x,
+                y
+            );
+
+
+            p.timer = 0;
+
+        }
+
+    }
+
+}
+
+
+// ========================================
+// ĐẬU BẮN
+// ========================================
+
+function banDan() {
+
+    for (let p of plants) {
+
+        if (p.type !== "pea") continue;
+
+
+        let px =
+            p.col * CW + 75;
+
+        let py =
+            p.row * CH + 45;
+
+
+        let coZombie =
+            zombies.some(z =>
+                z.row === p.row &&
+                z.x > px
+            );
+
+
+        if (coZombie) {
+
+            peas.push({
+
+                x: px,
+
+                y: py,
+
+                row: p.row
+
+            });
+
+        }
+
+    }
+
+}
+
+
+// ========================================
+// CẬP NHẬT ĐẠN
+// ========================================
+
+function capNhatDan() {
+
+    for (
+        let i = peas.length - 1;
+        i >= 0;
+        i--
+    ) {
+
+        let b = peas[i];
+
+        b.x += 7;
+
+
+        let trung = false;
+
+
+        for (
+            let j = zombies.length - 1;
+            j >= 0;
+            j--
+        ) {
+
+            let z = zombies[j];
+
+
+            if (
+                z.row === b.row &&
+                Math.abs(z.x - b.x) < 25
+            ) {
+
+                z.hp -= 25;
+
+                peas.splice(i, 1);
+
+                trung = true;
+
+
+                if (z.hp <= 0) {
+
+                    zombies.splice(j, 1);
+
+                    score += 10;
+
+                }
+
+                break;
+
+            }
+
+        }
+
+
+        if (
+            !trung &&
+            b.x > W
+        ) {
+
+            peas.splice(i, 1);
+
+        }
+
+    }
+
+}
+
+
+// ========================================
+// ZOMBIE
+// ========================================
+
+function taoZombie() {
+
+    let row =
+        Math.floor(
+            Math.random() * ROWS
+        );
+
+
+    zombies.push({
+
+        x: W + 40,
+
+        row: row,
+
+        hp: 100,
+
+        speed:
+            0.25 +
+            Math.random() * 0.15
+
+    });
+
+}
+
+
+// ========================================
+// CẬP NHẬT ZOMBIE
+// ========================================
+
+function capNhatZombie() {
+
+    for (let z of zombies) {
+
+        let dangAn = false;
+
+
+        for (let p of plants) {
+
+            if (
+                p.row === z.row &&
+                Math.abs(
+                    z.x -
+                    (p.col * CW + 50)
+                ) < 45
+            ) {
+
+                dangAn = true;
+
+                p.hp -= 0.3;
+
+                break;
+
+            }
+
+        }
+
+
+        if (!dangAn) {
+
+            z.x -= z.speed;
+
+        }
+
+    }
+
+
+    plants =
+        plants.filter(p =>
+            p.hp > 0
+        );
+
+}
+
+
+// ========================================
+// CHERRY NỔ
+// ========================================
+
+function capNhatCherry() {
 
     for (
         let i = plants.length - 1;
@@ -911,951 +1708,239 @@ function updatePlants() {
 
         let p = plants[i];
 
-        p.timer++;
+        if (p.type !== "cherry") continue;
 
 
-        // HƯỚNG DƯƠNG
-        if (
-            p.type === "sunflower"
-        ) {
+        let px =
+            p.col * CW + 50;
 
-            if (p.timer >= 480) {
-
-                p.timer = 0;
-
-                suns.push({
-
-                    x:
-                        BOARD_X +
-                        p.col * CW +
-                        CW / 2,
-
-                    y:
-                        TOP +
-                        p.row * CH +
-                        35,
-
-                    value: 25,
-
-                    life: 600
-                });
-            }
-        }
+        let py =
+            p.row * CH + 60;
 
 
-        // ĐẬU
-        else if (
-            p.type === "pea"
-        ) {
+        let no = zombies.some(z => {
 
-            let target =
-                zombies.find(
-                    z =>
-                        z.row === p.row &&
-                        z.x >
-                        BOARD_X +
-                        p.col * CW
-                );
-
-            if (
-                target &&
-                p.timer >= 85
-            ) {
-
-                shoot(p);
-
-                p.timer = 0;
-            }
-        }
-
-
-        // CHERRY
-        else if (
-            p.type === "cherry"
-        ) {
-
-            if (p.timer >= 45) {
-
-                let x =
-                    BOARD_X +
-                    p.col * CW +
-                    CW / 2;
-
-                let y =
-                    TOP +
-                    p.row * CH +
-                    CH / 2;
-
-                for (
-                    let z of zombies
-                ) {
-
-                    let zy =
-                        TOP +
-                        z.row * CH +
-                        CH / 2;
-
-                    let d =
-                        Math.hypot(
-                            z.x - x,
-                            zy - y
-                        );
-
-                    if (d < 190) {
-
-                        z.hp -= 180;
-                    }
-                }
-
-                plants.splice(i, 1);
-            }
-        }
-
-
-        // CÂY ĂN THỊT
-        else if (
-            p.type === "chomper"
-        ) {
-
-            if (p.eating) {
-
-                p.eatTimer--;
-
-                if (
-                    p.eatTimer <= 0
-                ) {
-
-                    p.eating = false;
-                    p.timer = 0;
-                }
-
-                continue;
-            }
-
-
-            let px =
-                BOARD_X +
-                p.col * CW +
-                CW / 2;
-
-            let target = null;
-
-            for (
-                let z of zombies
-            ) {
-
-                if (
-                    z.row !== p.row
-                ) {
-                    continue;
-                }
-
-                let distance =
-                    z.x - px;
-
-                if (
-                    distance > -20 &&
-                    distance < 100
-                ) {
-
-                    target = z;
-                    break;
-                }
-            }
-
-
-            if (target) {
-
-                target.hp = 0;
-
-                p.eating = true;
-
-                p.eatTimer = 300;
-            }
-        }
-    }
-}
-
-
-// =============================
-// VẼ ĐẠN
-// =============================
-
-function drawBullets() {
-
-    for (
-        let b of bullets
-    ) {
-
-        circle(
-            b.x,
-            b.y,
-            9,
-            "#3a9e31"
-        );
-
-        circle(
-            b.x - 3,
-            b.y - 3,
-            3,
-            "#a6df72"
-        );
-    }
-}
-
-
-// =============================
-// CẬP NHẬT ĐẠN
-// =============================
-
-function updateBullets() {
-
-    for (
-        let i = bullets.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        let b = bullets[i];
-
-        b.x += b.speed;
-
-        let hit = false;
-
-        for (
-            let z of zombies
-        ) {
-
-            if (
-                z.row !== b.row
-            ) {
-                continue;
-            }
+            let zx = z.x;
 
             let zy =
-                TOP +
-                z.row * CH +
-                CH / 2;
+                z.row * CH + 60;
 
-            if (
-                Math.abs(
-                    z.x - b.x
-                ) < 35 &&
-                Math.abs(
-                    zy - b.y
-                ) < 45
+
+            let dx = zx - px;
+
+            let dy = zy - py;
+
+
+            return Math.sqrt(
+                dx * dx +
+                dy * dy
+            ) < 110;
+
+        });
+
+
+        if (no) {
+
+            for (
+                let j = zombies.length - 1;
+                j >= 0;
+                j--
             ) {
 
-                z.hp -= b.damage;
+                let z = zombies[j];
 
-                hit = true;
+                let zx = z.x;
 
-                break;
-            }
-        }
+                let zy =
+                    z.row * CH + 60;
 
-        if (
-            hit ||
-            b.x > W
-        ) {
 
-            bullets.splice(i, 1);
-        }
-    }
-}
+                let dx = zx - px;
 
+                let dy = zy - py;
 
-// =============================
-// TẠO ZOMBIE
-// =============================
-
-function spawnZombie() {
-
-    let row =
-        Math.floor(
-            Math.random() * ROWS
-        );
-
-    let chance =
-        Math.random();
-
-    let type = "normal";
-
-    if (
-        chance < 0.20
-    ) {
-
-        type = "bucket";
-
-    } else if (
-        chance < 0.34
-    ) {
-
-        type = "big";
-    }
-
-
-    let hp = 120;
-    let speed = 0.45;
-    let scale = 1;
-
-
-    if (
-        type === "bucket"
-    ) {
-
-        hp = 300;
-        speed = 0.38;
-        scale = 1.05;
-    }
-
-
-    if (
-        type === "big"
-    ) {
-
-        hp = 650;
-        speed = 0.25;
-        scale = 1.35;
-    }
-
-
-    zombies.push({
-
-        type: type,
-
-        row: row,
-
-        x: W + 80,
-
-        hp: hp,
-
-        maxHp: hp,
-
-        speed: speed,
-
-        scale: scale,
-
-        attackTimer: 0
-    });
-}
-
-
-// =============================
-// VẼ ZOMBIE
-// =============================
-
-function drawZombie(z) {
-
-    let x = z.x;
-
-    let y =
-        TOP +
-        z.row * CH +
-        CH / 2;
-
-    let s = z.scale;
-
-    ctx.save();
-
-    ctx.translate(x, y);
-
-    ctx.scale(s, s);
-
-
-    // chân
-    rect(
-        -25,
-        45,
-        18,
-        48,
-        "#333"
-    );
-
-    rect(
-        8,
-        45,
-        18,
-        48,
-        "#333"
-    );
-
-
-    // thân
-    rect(
-        -38,
-        -5,
-        76,
-        65,
-        "#526b56"
-    );
-
-
-    // áo
-    rect(
-        -34,
-        5,
-        68,
-        50,
-        "#555d63"
-    );
-
-
-    // đầu
-    circle(
-        0,
-        -45,
-        42,
-        "#91a875"
-    );
-
-
-    // tóc
-    rect(
-        -34,
-        -83,
-        68,
-        16,
-        "#32322d"
-    );
-
-
-    // mắt
-    circle(
-        -14,
-        -50,
-        6,
-        "#111"
-    );
-
-    circle(
-        14,
-        -50,
-        6,
-        "#111"
-    );
-
-
-    // miệng
-    ctx.strokeStyle = "#222";
-    ctx.lineWidth = 4;
-
-    ctx.beginPath();
-
-    ctx.arc(
-        0,
-        -30,
-        17,
-        0.1,
-        Math.PI - 0.1
-    );
-
-    ctx.stroke();
-
-
-    // cà vạt
-    ctx.fillStyle = "#8b2222";
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        0,
-        -2
-    );
-
-    ctx.lineTo(
-        -9,
-        25
-    );
-
-    ctx.lineTo(
-        0,
-        43
-    );
-
-    ctx.lineTo(
-        9,
-        25
-    );
-
-    ctx.fill();
-
-
-    // ZOMBIE XÔ
-    if (
-        z.type === "bucket"
-    ) {
-
-        rect(
-            -35,
-            -102,
-            70,
-            34,
-            "#888"
-        );
-
-        rect(
-            -30,
-            -108,
-            60,
-            9,
-            "#555"
-        );
-
-        line(
-            -35,
-            -82,
-            35,
-            -82,
-            "#444",
-            5
-        );
-    }
-
-
-    // ZOMBIE BIG
-    if (
-        z.type === "big"
-    ) {
-
-        circle(
-            0,
-            -105,
-            18,
-            "#4d4d4d"
-        );
-
-        rect(
-            -58,
-            55,
-            116,
-            18,
-            "#3b3b3b"
-        );
-    }
-
-
-    ctx.restore();
-
-
-    let barW =
-        75 * z.scale;
-
-    rect(
-        x - barW / 2,
-        y - 105 * z.scale,
-        barW,
-        7,
-        "#650000"
-    );
-
-    rect(
-        x - barW / 2,
-        y - 105 * z.scale,
-        barW *
-        Math.max(
-            0,
-            z.hp / z.maxHp
-        ),
-        7,
-        "#22a52f"
-    );
-}
-
-
-// =============================
-// CẬP NHẬT ZOMBIE
-// =============================
-
-function updateZombies() {
-
-    for (
-        let i = zombies.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        let z = zombies[i];
-
-        if (
-            z.hp <= 0
-        ) {
-
-            zombies.splice(i, 1);
-
-            continue;
-        }
-
-
-        let blocked = false;
-
-
-        for (
-            let p of plants
-        ) {
-
-            if (
-                p.row !== z.row
-            ) {
-                continue;
-            }
-
-            let px =
-                BOARD_X +
-                p.col * CW +
-                CW / 2;
-
-            if (
-                Math.abs(
-                    z.x - px
-                ) < 65
-            ) {
-
-                blocked = true;
-
-                z.attackTimer++;
 
                 if (
-                    z.attackTimer >= 50
+                    Math.sqrt(
+                        dx * dx +
+                        dy * dy
+                    ) < 180
                 ) {
 
-                    z.attackTimer = 0;
+                    zombies.splice(j, 1);
 
-                    p.hp -=
-                        z.type === "big"
-                            ? 18
-                            : 10;
+                    score += 20;
+
                 }
 
-                break;
             }
+
+
+            plants.splice(i, 1);
+
         }
 
-
-        if (!blocked) {
-
-            z.x -= z.speed;
-        }
-
-
-        // máy cắt cỏ
-        for (
-            let m of mowers
-        ) {
-
-            if (
-                m.row === z.row &&
-                !m.active &&
-                z.x < BOARD_X + 50
-            ) {
-
-                m.active = true;
-            }
-        }
-
-
-        if (
-            z.x < 0
-        ) {
-
-            gameOver = true;
-        }
     }
+
 }
 
 
-// =============================
+// ========================================
 // MÁY CẮT CỎ
-// =============================
+// ========================================
 
-function updateMowers() {
+function capNhatMayCat() {
 
-    for (
-        let m of mowers
-    ) {
+    for (let m of mowers) {
 
-        if (!m.active) {
-            continue;
-        }
-
-        m.x += 9;
+        if (m.used) continue;
 
 
-        for (
-            let i = zombies.length - 1;
-            i >= 0;
-            i--
-        ) {
-
-            let z = zombies[i];
-
-            if (
+        let zombieGan =
+            zombies.some(z =>
                 z.row === m.row &&
-                Math.abs(
-                    z.x - m.x
-                ) < 70
-            ) {
-
-                zombies.splice(i, 1);
-            }
-        }
-    }
-}
-
-
-function drawMowers() {
-
-    for (
-        let m of mowers
-    ) {
-
-        let y = m.y;
-
-        rect(
-            m.x - 35,
-            y - 22,
-            70,
-            35,
-            "#c9362b"
-        );
-
-        circle(
-            m.x - 22,
-            y + 18,
-            12,
-            "#222"
-        );
-
-        circle(
-            m.x + 22,
-            y + 18,
-            12,
-            "#222"
-        );
-
-        line(
-            m.x - 20,
-            y - 20,
-            m.x - 45,
-            y - 55,
-            "#222",
-            7
-        );
-
-        line(
-            m.x - 45,
-            y - 55,
-            m.x - 20,
-            y - 65,
-            "#222",
-            7
-        );
-
-        circle(
-            m.x + 27,
-            y - 8,
-            6,
-            "#ffe84d"
-        );
-    }
-}
-
-
-// =============================
-// BẢNG CỎ
-// =============================
-
-function drawBoard() {
-
-    rect(
-        0,
-        TOP,
-        W,
-        H - TOP,
-        "#67ad43"
-    );
-
-
-    rect(
-        0,
-        TOP,
-        MOWER_W,
-        ROWS * CH,
-        "#4c8e36"
-    );
-
-
-    for (
-        let r = 0;
-        r < ROWS;
-        r++
-    ) {
-
-        for (
-            let c = 0;
-            c < COLS;
-            c++
-        ) {
-
-            let x =
-                BOARD_X +
-                c * CW;
-
-            let y =
-                TOP +
-                r * CH;
-
-            rect(
-                x,
-                y,
-                CW - 2,
-                CH - 2,
-                (r + c) % 2 === 0
-                    ? "#78bd4c"
-                    : "#70b646"
+                z.x < 80
             );
+
+
+        if (zombieGan) {
+
+            m.active = true;
+
+        }
+
+
+        if (m.active) {
+
+            m.x += 9;
 
 
             for (
-                let k = 0;
-                k < 4;
-                k++
+                let i = zombies.length - 1;
+                i >= 0;
+                i--
             ) {
 
-                let gx =
-                    x +
-                    20 +
-                    k * 30;
+                let z = zombies[i];
 
-                let gy =
-                    y +
-                    CH -
-                    20;
 
-                line(
-                    gx,
-                    gy,
-                    gx - 3,
-                    gy - 10,
-                    "#4f9638",
-                    2
-                );
+                if (
+                    z.row === m.row &&
+                    z.x < m.x + 50
+                ) {
+
+                    zombies.splice(i, 1);
+
+                    score += 10;
+
+                }
+
             }
-        }
-    }
 
 
-    for (
-        let r = 0;
-        r <= ROWS;
-        r++
-    ) {
+            if (m.x > W + 100) {
 
-        line(
-            BOARD_X,
-            TOP + r * CH,
-            BOARD_X + COLS * CW,
-            TOP + r * CH,
-            "#3c8230",
-            2
-        );
-    }
+                m.used = true;
 
+                m.active = false;
 
-    for (
-        let c = 0;
-        c <= COLS;
-        c++
-    ) {
+            }
 
-        line(
-            BOARD_X + c * CW,
-            TOP,
-            BOARD_X + c * CW,
-            TOP + ROWS * CH,
-            "#3c8230",
-            2
-        );
-    }
-}
-
-
-// =============================
-// MẶT TRỜI
-// =============================
-
-function drawSuns() {
-
-    for (
-        let s of suns
-    ) {
-
-        circle(
-            s.x,
-            s.y,
-            24,
-            "#ffd52e"
-        );
-
-        for (
-            let i = 0;
-            i < 8;
-            i++
-        ) {
-
-            let a =
-                i * Math.PI / 4;
-
-            line(
-                s.x + Math.cos(a) * 28,
-                s.y + Math.sin(a) * 28,
-                s.x + Math.cos(a) * 38,
-                s.y + Math.sin(a) * 38,
-                "#e9a900",
-                3
-            );
         }
 
-        circle(
-            s.x - 7,
-            s.y - 4,
-            3,
-            "#111"
-        );
-
-        circle(
-            s.x + 7,
-            s.y - 4,
-            3,
-            "#111"
-        );
     }
+
 }
 
 
-function spawnSun() {
+// ========================================
+// GAME OVER
+// ========================================
 
-    suns.push({
+function kiemTraGameOver() {
 
-        x:
-            BOARD_X +
-            Math.random() *
-            (COLS * CW),
+    for (let z of zombies) {
 
-        y:
-            TOP +
-            30 +
-            Math.random() *
-            (ROWS * CH - 60),
+        if (z.x < 0) {
 
-        value: 25,
+            gameOver = true;
 
-        life: 800
-    });
+        }
+
+    }
+
 }
 
 
-function updateSuns() {
+// ========================================
+// CẬP NHẬT
+// ========================================
+
+function update() {
+
+    if (gameOver) return;
+
+
+    let now =
+        Date.now();
+
+
+    // zombie
+
+    if (
+        now - lastZombie > 4500
+    ) {
+
+        taoZombie();
+
+        lastZombie = now;
+
+    }
+
+
+    // mặt trời tự nhiên
+
+    if (
+        now - lastSun > 10000
+    ) {
+
+        taoMatTroi(
+            100 + Math.random() * 800,
+            70 + Math.random() * 400
+        );
+
+        lastSun = now;
+
+    }
+
+
+    // đậu bắn
+
+    if (
+        now - lastShot > 1100
+    ) {
+
+        banDan();
+
+        lastShot = now;
+
+    }
+
+
+    capNhatCayMatTroi();
+
+    capNhatDan();
+
+    capNhatZombie();
+
+    capNhatCherry();
+
+    capNhatMayCat();
+
+    kiemTraGameOver();
+
+
+    // mặt trời hết thời gian
 
     for (
         let i = suns.length - 1;
@@ -1865,288 +1950,95 @@ function updateSuns() {
 
         suns[i].life--;
 
+
         if (
             suns[i].life <= 0
         ) {
 
             suns.splice(i, 1);
+
         }
+
     }
+
+
+    capNhat();
+
 }
 
 
-function collectSun(x, y) {
+// ========================================
+// HIỂN THỊ
+// ========================================
 
-    for (
-        let i = suns.length - 1;
-        i >= 0;
-        i--
-    ) {
+function capNhat() {
 
-        let s = suns[i];
+    document.getElementById("sun").innerText =
+        sun;
 
-        if (
-            Math.hypot(
-                x - s.x,
-                y - s.y
-            ) < 45
-        ) {
+    document.getElementById("score").innerText =
+        score;
 
-            sun += s.value;
-
-            suns.splice(i, 1);
-
-            return true;
-        }
-    }
-
-    return false;
 }
 
 
-// =============================
-// ĐIỀU KHIỂN
-// =============================
+// ========================================
+// CHƠI LẠI
+// ========================================
 
-function pointerDown(e) {
+function choiLai() {
 
-    e.preventDefault();
+    sun = 200;
 
-    let rc =
-        canvas.getBoundingClientRect();
+    score = 0;
 
-    let scaleX =
-        W / rc.width;
+    selected = null;
 
-    let scaleY =
-        H / rc.height;
+    plants = [];
 
-    let x =
-        (e.clientX - rc.left) *
-        scaleX;
+    zombies = [];
 
-    let y =
-        (e.clientY - rc.top) *
-        scaleY;
+    peas = [];
 
+    suns = [];
 
-    if (gameOver) {
+    explosions = [];
 
-        location.reload();
+    gameOver = false;
 
-        return;
-    }
+    lastZombie = Date.now();
 
+    lastSun = Date.now();
 
-    if (
-        collectSun(x, y)
-    ) {
+    lastShot = Date.now();
 
-        return;
-    }
+    taoMayCatCo();
 
 
-    let cards = [
-        ["sunflower", 190],
-        ["pea", 330],
-        ["wallnut", 470],
-        ["cherry", 610],
-        ["chomper", 750]
-    ];
+    document.getElementById("selected").innerText =
+        "Chưa chọn cây";
 
+    capNhat();
 
-    for (
-        let item of cards
-    ) {
-
-        let type = item[0];
-        let bx = item[1];
-
-        if (
-            x >= bx &&
-            x <= bx + 125 &&
-            y >= 10 &&
-            y <= 100
-        ) {
-
-            selected = type;
-
-            return;
-        }
-    }
-
-
-    if (
-        x < BOARD_X
-    ) {
-
-        return;
-    }
-
-
-    if (
-        y < TOP
-    ) {
-
-        return;
-    }
-
-
-    let col =
-        Math.floor(
-            (x - BOARD_X) / CW
-        );
-
-    let row =
-        Math.floor(
-            (y - TOP) / CH
-        );
-
-
-    plantAt(
-        row,
-        col
-    );
 }
 
 
-canvas.addEventListener(
-    "pointerdown",
-    pointerDown
-);
-
-
-// =============================
-// VÒNG LẶP GAME
-// =============================
-
-function draw() {
-
-    ctx.clearRect(
-        0,
-        0,
-        W,
-        H
-    );
-
-    drawBoard();
-
-    drawTop();
-
-    drawMowers();
-
-
-    for (
-        let p of plants
-    ) {
-
-        drawPlant(p);
-    }
-
-
-    drawBullets();
-
-
-    for (
-        let z of zombies
-    ) {
-
-        drawZombie(z);
-    }
-
-
-    drawSuns();
-
-
-    if (gameOver) {
-
-        rect(
-            0,
-            0,
-            W,
-            H,
-            "rgba(0,0,0,0.65)"
-        );
-
-        text(
-            "GAME OVER",
-            W / 2,
-            H / 2 - 35,
-            65,
-            "#ffffff"
-        );
-
-        text(
-            "Chạm màn hình để chơi lại",
-            W / 2,
-            H / 2 + 35,
-            25,
-            "#ffffff"
-        );
-    }
-}
-
-
-function update() {
-
-    if (gameOver) {
-        return;
-    }
-
-    frame++;
-
-    updatePlants();
-
-    updateBullets();
-
-    updateZombies();
-
-    updateMowers();
-
-    updateSuns();
-
-
-    if (
-        frame % 210 === 0
-    ) {
-
-        spawnZombie();
-    }
-
-
-    if (
-        frame % 420 === 0
-    ) {
-
-        spawnSun();
-    }
-
-
-    for (
-        let i = plants.length - 1;
-        i >= 0;
-        i--
-    ) {
-
-        if (
-            plants[i].hp <= 0
-        ) {
-
-            plants.splice(i, 1);
-        }
-    }
-}
-
+// ========================================
+// GAME LOOP
+// ========================================
 
 function loop() {
 
     update();
 
-    draw();
+    veGame();
 
     requestAnimationFrame(loop);
+
 }
 
+
+choiLai();
 
 loop();
 
@@ -2157,12 +2049,11 @@ loop();
 """
 
     components.html(
-        game,
-        height=905,
+        html,
+        height=760,
         scrolling=False
     )
 
 
 if __name__ == "__main__":
     main()
-
